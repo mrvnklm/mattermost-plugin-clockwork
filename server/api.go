@@ -483,9 +483,16 @@ func (p *Plugin) handleAdminEntries(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Resolve usernames once per user so the admin table can show names, not IDs.
+	// Bounded so a very wide range can't trigger an unbounded number of per-user
+	// API calls; beyond the cap we fall back to the raw id.
+	const maxUserLookups = 500
 	usernames := map[string]string{}
 	for _, e := range entries {
 		if _, ok := usernames[e.UserID]; ok {
+			continue
+		}
+		if len(usernames) >= maxUserLookups {
+			usernames[e.UserID] = e.UserID
 			continue
 		}
 		if u, uerr := p.client.User.Get(e.UserID); uerr == nil {

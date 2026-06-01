@@ -6,7 +6,7 @@ import type {TimeEntry} from 'client/Client';
 import {t} from 'i18n';
 import React, {useEffect, useMemo, useState} from 'react';
 import {ensureStyles} from 'styles';
-import {decimalHours, netSeconds} from 'utils/time';
+import {decimalHours, fromDatetimeInput, netSeconds} from 'utils/time';
 
 import type {AdminRow} from 'components/admin/AdminTable';
 import AdminTable from 'components/admin/AdminTable';
@@ -40,9 +40,10 @@ export default function AdminConsole(): JSX.Element {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    // Date-input strings → epoch ms covering the full local days [from, to].
-    const fromMs = new Date(from + 'T00:00:00').getTime();
-    const toMs = new Date(to + 'T23:59:59.999').getTime();
+    // Date-input strings → epoch ms covering the full days [from, to], resolved
+    // in the user's Mattermost timezone (consistent with the table/CSV grouping).
+    const fromMs = fromDatetimeInput(from + 'T00:00');
+    const toMs = fromDatetimeInput(to + 'T23:59') + 59_999;
 
     // Reload whenever the range changes (and on mount).
     useEffect(() => {
