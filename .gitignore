@@ -1,0 +1,20 @@
+bin/
+dist/
+node_modules/
+webapp/node_modules/
+webapp/dist/
+webapp/src/manifest.ts
+server/manifest.go
+server/coverage.txt
+
+# Test / tooling artifacts
+.playwright-mcp/
+
+# Mac
+.DS_Store
+
+# Jetbrains
+.idea/
+
+# VS Code
+.vscode
