@@ -1,9 +1,9 @@
 {
     "id": "com.vsjwl.mm-time-tracking",
-    "name": "Time Tracking",
-    "description": "Arbeitszeiterfassung for Mattermost: clock in/out with breaks, weekly timesheets, and CSV export.",
-    "homepage_url": "https://github.com/vsjwl/mm-time-tracking",
-    "support_url": "https://github.com/vsjwl/mm-time-tracking/issues",
+    "name": "Clockwork",
+    "description": "Clockwork — Arbeitszeiterfassung for Mattermost: clock in/out with breaks, weekly timesheets, and CSV export.",
+    "homepage_url": "https://github.com/mrvnklm/mattermost-plugin-clockwork",
+    "support_url": "https://github.com/mrvnklm/mattermost-plugin-clockwork/issues",
     "icon_path": "assets/icon.svg",
     "min_server_version": "9.0.0",
     "server": {
@@ -19,7 +19,7 @@
         "bundle_path": "webapp/dist/main.js"
     },
     "settings_schema": {
-        "header": "Team working-time report is available at Main Menu → “Time Tracking — Team report” (system admins only).",
+        "header": "Clockwork team report is available at Main Menu → “Clockwork — Team report” (system admins only).",
         "footer": "",
         "settings": []
     }

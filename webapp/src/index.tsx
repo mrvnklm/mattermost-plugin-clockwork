@@ -55,12 +55,12 @@ export default class Plugin {
             // ignore — i18n defaults to German, timezone to browser-local
         }
 
-        const {showRHSPlugin} = registry.registerRightHandSidebarComponent(RHSView, 'Time Tracking');
+        const {showRHSPlugin} = registry.registerRightHandSidebarComponent(RHSView, 'Clockwork');
 
         registry.registerChannelHeaderButtonAction(
             <ClockIcon/>,
             () => store.dispatch(showRHSPlugin),
-            'Time Tracking',
+            'Clockwork',
             'Track work time',
         );
 
@@ -81,7 +81,7 @@ export default class Plugin {
 
         if (isAdmin && registry.registerMainMenuAction) {
             registry.registerMainMenuAction(
-                'Time Tracking — Team report',
+                'Clockwork — Team report',
                 () => {
                     const s: any = store.getState();
                     const teamId = s?.entities?.teams?.currentTeamId;

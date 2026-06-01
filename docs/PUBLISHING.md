@@ -2,7 +2,7 @@
 
 ## 1. Prepare the public repository
 
-1. Create a **public** GitHub repo (e.g. `vsjwl/mm-time-tracking`) and push `main`.
+1. Create a **public** GitHub repo (e.g. `mrvnklm/mattermost-plugin-clockwork`) and push `main`.
 2. Confirm `plugin.json` fields are correct: `id`, `name`, `description`,
    `homepage_url`, `support_url`, `icon_path`, `min_server_version`.
 3. Keep `LICENSE` (Apache-2.0) and `README.md` with screenshots at the repo root.

@@ -15,4 +15,4 @@ All notable changes to this project are documented here. The format is based on
 - Full-page **Team report** for system admins (date range, per-user filter, totals, export).
 - German + English UI.
 
-[Unreleased]: https://github.com/vsjwl/mm-time-tracking/commits/main
+[Unreleased]: https://github.com/mrvnklm/mattermost-plugin-clockwork/commits/main

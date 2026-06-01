@@ -1,6 +1,6 @@
-# Mattermost Time Tracking (Arbeitszeiterfassung)
+# Clockwork — Mattermost Time Tracking (Arbeitszeiterfassung)
 
-[![CI](https://github.com/vsjwl/mm-time-tracking/actions/workflows/ci.yml/badge.svg)](https://github.com/vsjwl/mm-time-tracking/actions/workflows/ci.yml)
+[![CI](https://github.com/mrvnklm/mattermost-plugin-clockwork/actions/workflows/ci.yml/badge.svg)](https://github.com/mrvnklm/mattermost-plugin-clockwork/actions/workflows/ci.yml)
 
 A native Mattermost plugin for tracking working hours directly inside Mattermost —
 clock in/out with breaks, a weekly timesheet, manual corrections, and CSV export.
@@ -19,7 +19,7 @@ breaks and net daily hours), with an optional project/description per entry.
   - **Today** list and a **weekly timesheet** (start, end, breaks, net hours, week total).
   - Add / edit / delete entries manually (timezone-correct, DST-safe).
 - **Slash command** `/track in|out|break|status` for fast clocking.
-- **Team report** (full-page, system-admins only — Main Menu → “Time Tracking — Team report”):
+- **Team report** (full-page, system-admins only — Main Menu → “Clockwork — Team report”):
   date-range filter, per-user filter, totals, and **CSV export** across all users.
 - **CSV export** for your own records, and for admins across the team (formula-injection safe).
 - Net hours = `end − start − breaks`; days are grouped in each user's Mattermost timezone.
@@ -87,7 +87,7 @@ Or upload `dist/*.tar.gz` via **System Console → Plugins → Management**.
 - Click the **clock icon** in the channel header to open the panel; **Start** a timer
   (optionally type a project/note), **Break** to pause, **Stop** to clock out.
 - `/track in` · `/track out` · `/track break` · `/track status`.
-- System admins: **Main Menu → “Time Tracking — Team report”** for the team dashboard + export.
+- System admins: **Main Menu → “Clockwork — Team report”** for the team dashboard + export.
 
 ## Tests
 

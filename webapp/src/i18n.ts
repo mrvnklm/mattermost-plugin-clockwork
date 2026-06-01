@@ -52,7 +52,7 @@ export type StringKey =
 type Strings = Record<StringKey, string>;
 
 const en: Strings = {
-    title: 'Time Tracking',
+    title: 'Clockwork',
     start: 'Start',
     stop: 'Stop',
     breakStart: 'Break',
@@ -98,7 +98,7 @@ const en: Strings = {
 };
 
 const de: Strings = {
-    title: 'Zeiterfassung',
+    title: 'Clockwork',
     start: 'Start',
     stop: 'Stopp',
     breakStart: 'Pause',
