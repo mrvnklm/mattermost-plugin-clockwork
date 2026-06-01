@@ -160,17 +160,12 @@ func (s *SQLStore) StartTimer(userID, project, description string, now int64) (*
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Check for an existing running entry. On MySQL we add FOR UPDATE so the
-	// row/gap lock on the user_id index range serializes concurrent starts
-	// (MySQL has no partial unique index). On Postgres the partial unique index
-	// idx_tt_user_running is the hard backstop, so no row lock is needed here
-	// (and FOR UPDATE is disallowed with aggregates/this read anyway).
-	existsQuery := "SELECT id FROM timetracking_entries WHERE user_id = ? AND end_at IS NULL LIMIT 1"
-	if s.driver == driverMySQL {
-		existsQuery += " FOR UPDATE"
-	}
+	// Fast-path check for a friendly error. The authoritative guard against a
+	// concurrent start is the unique key on the open row — the Postgres partial
+	// index idx_tt_user_running and the MySQL generated-column key
+	// uniq_tt_user_running — enforced on INSERT below.
 	var existingID string
-	switch scanErr := tx.QueryRow(s.ph(existsQuery), userID).Scan(&existingID); {
+	switch scanErr := tx.QueryRow(s.ph("SELECT id FROM timetracking_entries WHERE user_id = ? AND end_at IS NULL LIMIT 1"), userID).Scan(&existingID); {
 	case scanErr == nil:
 		return nil, ErrAlreadyRunning
 	case errors.Is(scanErr, sql.ErrNoRows):
@@ -191,9 +186,8 @@ func (s *SQLStore) StartTimer(userID, project, description string, now int64) (*
 	}
 
 	if err := s.insertEntry(tx, e); err != nil {
-		// On Postgres the partial unique index idx_tt_user_running is the
-		// authoritative guard against a concurrent start slipping past the
-		// count check above; map its violation to the domain error.
+		// A unique-key violation on the open-row index means a concurrent start
+		// slipped past the fast-path check; surface it as the domain error.
 		if isUniqueViolation(err) {
 			return nil, ErrAlreadyRunning
 		}
@@ -207,13 +201,18 @@ func (s *SQLStore) StartTimer(userID, project, description string, now int64) (*
 	return e, nil
 }
 
-// isUniqueViolation reports whether err is a violation of the Postgres partial
-// unique index idx_tt_user_running (one running entry per user). It matches that
-// index by name so an unrelated constraint (e.g. the primary key) is never
-// mistaken for the running-entry collision. MySQL has no such index and
-// serializes starts via FOR UPDATE in StartTimer instead.
+// isUniqueViolation reports whether err is a violation of the one-running-entry
+// unique key — the Postgres partial index idx_tt_user_running or the MySQL
+// generated-column key uniq_tt_user_running. It matches those names so an
+// unrelated constraint (e.g. the primary key) is never mistaken for the
+// running-entry collision.
 func isUniqueViolation(err error) bool {
-	return err != nil && strings.Contains(strings.ToLower(err.Error()), "idx_tt_user_running")
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	// Postgres partial unique index, or the MySQL generated-column unique key.
+	return strings.Contains(msg, "idx_tt_user_running") || strings.Contains(msg, "uniq_tt_user_running")
 }
 
 // mutateRunning loads the user's running entry inside a transaction with a row

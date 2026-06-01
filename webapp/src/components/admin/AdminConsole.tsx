@@ -10,6 +10,7 @@ import {decimalHours, fromDatetimeInput, netSeconds} from 'utils/time';
 
 import type {AdminRow} from 'components/admin/AdminTable';
 import AdminTable from 'components/admin/AdminTable';
+import AdminUserSummary from 'components/admin/AdminUserSummary';
 
 ensureStyles();
 
@@ -36,6 +37,7 @@ export default function AdminConsole(): JSX.Element {
     });
     const [to, setTo] = useState(() => dateInput(new Date()));
     const [userFilter, setUserFilter] = useState('');
+    const [showEntries, setShowEntries] = useState(false);
     const [rows, setRows] = useState<AdminRow[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -102,6 +104,12 @@ export default function AdminConsole(): JSX.Element {
     );
     const entriesCount = filtered.length;
 
+    // The detailed entries default to hidden to reduce clutter, but always
+    // expand when a user filter narrows the report to one person or when the
+    // admin explicitly toggles them on.
+    const filterActive = userFilter.trim() !== '';
+    const entriesExpanded = filterActive || showEntries;
+
     return (
         <div className='tt-admin'>
             <div className='tt-admin__inner'>
@@ -166,10 +174,28 @@ export default function AdminConsole(): JSX.Element {
                 {loading && rows.length === 0 ? (
                     <div className='tt-admin__empty'>{t('loading')}</div>
                 ) : (
-                    <AdminTable
-                        rows={filtered}
-                        now={now}
-                    />
+                    <>
+                        <AdminUserSummary
+                            rows={filtered}
+                            now={now}
+                            onSelectUser={setUserFilter}
+                        />
+                        <div className='tt-admin__bar'>
+                            <button
+                                className='tt-link'
+                                disabled={filterActive}
+                                onClick={() => setShowEntries((v) => !v)}
+                            >
+                                {entriesExpanded ? t('hideEntries') : t('showEntries')}
+                            </button>
+                        </div>
+                        {entriesExpanded ? (
+                            <AdminTable
+                                rows={filtered}
+                                now={now}
+                            />
+                        ) : null}
+                    </>
                 )}
             </div>
         </div>

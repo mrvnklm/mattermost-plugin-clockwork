@@ -92,7 +92,7 @@ export default function RHSView(): JSX.Element {
     return (
         <div className='tt'>
             {/* Autocomplete sources shared by the start form and the edit modal. */}
-            <datalist id='tt-projects'>
+            <datalist id='clockwork-projects'>
                 {suggest.projects.map((v) => (
                     <option
                         key={v}
@@ -100,7 +100,7 @@ export default function RHSView(): JSX.Element {
                     />
                 ))}
             </datalist>
-            <datalist id='tt-notes'>
+            <datalist id='clockwork-notes'>
                 {suggest.notes.map((v) => (
                     <option
                         key={v}
@@ -150,7 +150,7 @@ export default function RHSView(): JSX.Element {
                         <input
                             type='text'
                             className='tt-field'
-                            list='tt-projects'
+                            list='clockwork-projects'
                             placeholder={t('project')}
                             value={project}
                             disabled={busy}
@@ -159,7 +159,7 @@ export default function RHSView(): JSX.Element {
                         <input
                             type='text'
                             className='tt-field'
-                            list='tt-notes'
+                            list='clockwork-notes'
                             placeholder={t('note')}
                             value={description}
                             disabled={busy}

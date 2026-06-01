@@ -139,7 +139,7 @@ export default function EntryEditModal({entry, onClose, onSaved}: Props): JSX.El
                 <input
                     type='text'
                     className='tt-field'
-                    list='tt-projects'
+                    list='clockwork-projects'
                     value={project}
                     disabled={disabled}
                     onChange={(e) => setProject(e.target.value)}
@@ -149,7 +149,7 @@ export default function EntryEditModal({entry, onClose, onSaved}: Props): JSX.El
                 <input
                     type='text'
                     className='tt-field'
-                    list='tt-notes'
+                    list='clockwork-notes'
                     value={description}
                     disabled={disabled}
                     onChange={(e) => setDescription(e.target.value)}

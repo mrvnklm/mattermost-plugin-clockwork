@@ -63,6 +63,10 @@ CREATE TABLE IF NOT EXISTS timetracking_entries (
 // INDEX but not CREATE INDEX IF NOT EXISTS), giving an idempotent single
 // statement.
 func (s *SQLStore) migrateMySQL() error {
+	// MySQL has no partial indexes, so the single-running-entry invariant is
+	// enforced with a STORED generated column that equals user_id only while the
+	// entry is open (end_at NULL) and is NULL otherwise — a UNIQUE key on it
+	// permits many closed rows (NULLs repeat) but at most one open row per user.
 	const createTable = `
 CREATE TABLE IF NOT EXISTS timetracking_entries (
 	id VARCHAR(26) PRIMARY KEY,
@@ -76,7 +80,9 @@ CREATE TABLE IF NOT EXISTS timetracking_entries (
 	locked BOOLEAN NOT NULL DEFAULT FALSE,
 	created_at BIGINT NOT NULL,
 	updated_at BIGINT NOT NULL,
-	INDEX idx_tt_user_start (user_id, start_at)
+	running_user_id VARCHAR(26) GENERATED ALWAYS AS (CASE WHEN end_at IS NULL THEN user_id ELSE NULL END) STORED,
+	INDEX idx_tt_user_start (user_id, start_at),
+	UNIQUE KEY uniq_tt_user_running (running_user_id)
 )`
 
 	if _, err := s.db.Exec(createTable); err != nil {

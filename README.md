@@ -8,7 +8,7 @@ Built compliance-first for German *Arbeitszeiterfassung* (records start, end,
 breaks and net daily hours), with an optional project/description per entry.
 
 - **Plugin id:** `com.vsjwl.mm-time-tracking`
-- **Min server version:** 9.0.0 (self-hosted; uses the plugin SQL store — Postgres or MySQL)
+- **Min server version:** 9.0.0 (self-hosted). **Postgres recommended** (the DB newer Mattermost supports); **MySQL** also works and is verified — kept as a nice-to-have for older deployments.
 - **License:** Apache-2.0 · German + English UI
 
 ## Features

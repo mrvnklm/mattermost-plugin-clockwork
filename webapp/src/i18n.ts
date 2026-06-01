@@ -47,7 +47,9 @@ export type StringKey =
     | 'exportCsv'
     | 'totalHours'
     | 'people'
-    | 'entriesCount';
+    | 'entriesCount'
+    | 'showEntries'
+    | 'hideEntries';
 
 type Strings = Record<StringKey, string>;
 
@@ -95,6 +97,8 @@ const en: Strings = {
     totalHours: 'Total hours',
     people: 'People',
     entriesCount: 'Entries',
+    showEntries: 'Show entries',
+    hideEntries: 'Hide entries',
 };
 
 const de: Strings = {
@@ -141,6 +145,8 @@ const de: Strings = {
     totalHours: 'Gesamtstunden',
     people: 'Personen',
     entriesCount: 'Einträge',
+    showEntries: 'Einträge anzeigen',
+    hideEntries: 'Einträge ausblenden',
 };
 
 const catalogs: Record<string, Strings> = {en, de};
