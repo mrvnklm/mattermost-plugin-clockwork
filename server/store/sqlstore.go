@@ -72,7 +72,7 @@ func (s *SQLStore) ph(query string) string {
 	for i := 0; i < len(query); i++ {
 		if query[i] == '?' {
 			n++
-			b.WriteString(fmt.Sprintf("$%d", n))
+			fmt.Fprintf(&b, "$%d", n)
 			continue
 		}
 		b.WriteByte(query[i])
@@ -82,7 +82,7 @@ func (s *SQLStore) ph(query string) string {
 
 // nullInt converts a Go millis value to a nullable column value: the 0 sentinel
 // becomes SQL NULL.
-func nullInt(v int64) interface{} {
+func nullInt(v int64) any {
 	if v == 0 {
 		return nil
 	}
@@ -91,7 +91,7 @@ func nullInt(v int64) interface{} {
 
 // scanEntry scans a single row (in canonical column order) into a TimeEntry,
 // mapping NULL end_at/break_started_at back to the 0 sentinel.
-func scanEntry(row interface{ Scan(...interface{}) error }) (*TimeEntry, error) {
+func scanEntry(row interface{ Scan(...any) error }) (*TimeEntry, error) {
 	var (
 		e          TimeEntry
 		endAt      sql.NullInt64
@@ -134,8 +134,9 @@ func scanEntry(row interface{ Scan(...interface{}) error }) (*TimeEntry, error) 
 
 // insertEntry inserts e using the supplied executor (DB or Tx).
 func (s *SQLStore) insertEntry(ex interface {
-	Exec(query string, args ...interface{}) (sql.Result, error)
-}, e *TimeEntry) error {
+	Exec(query string, args ...any) (sql.Result, error)
+}, e *TimeEntry,
+) error {
 	status := e.Status
 	if status == "" {
 		status = StatusOpen
@@ -375,12 +376,12 @@ func (s *SQLStore) ListAll(userID string, from, to int64) ([]*TimeEntry, error) 
 }
 
 // queryEntries runs a SELECT returning multiple rows and scans them all.
-func (s *SQLStore) queryEntries(query string, args ...interface{}) ([]*TimeEntry, error) {
+func (s *SQLStore) queryEntries(query string, args ...any) ([]*TimeEntry, error) {
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "store: query entries")
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	entries := []*TimeEntry{}
 	for rows.Next() {
@@ -562,7 +563,7 @@ func (s *SQLStore) distinctValues(userID, column string, limit int) ([]string, e
 	if err != nil {
 		return nil, errors.Wrap(err, "store: query suggestions")
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	values := []string{}
 	for rows.Next() {

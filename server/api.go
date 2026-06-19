@@ -99,7 +99,7 @@ func (p *Plugin) MattermostAuthorizationRequired(next http.Handler) http.Handler
 
 // --- JSON helpers ---
 
-func (p *Plugin) writeJSON(w http.ResponseWriter, status int, payload interface{}) {
+func (p *Plugin) writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if payload == nil {
@@ -203,7 +203,7 @@ func (p *Plugin) handleTimerCurrent(w http.ResponseWriter, r *http.Request) {
 	if p.writeStoreError(w, err) {
 		return
 	}
-	p.writeJSON(w, http.StatusOK, map[string]interface{}{"entry": entry})
+	p.writeJSON(w, http.StatusOK, map[string]any{"entry": entry})
 }
 
 func (p *Plugin) handleTimerStart(w http.ResponseWriter, r *http.Request) {
@@ -220,7 +220,7 @@ func (p *Plugin) handleTimerStart(w http.ResponseWriter, r *http.Request) {
 	if p.writeStoreError(w, err) {
 		return
 	}
-	p.writeJSON(w, http.StatusOK, map[string]interface{}{"entry": entry})
+	p.writeJSON(w, http.StatusOK, map[string]any{"entry": entry})
 }
 
 func (p *Plugin) handleTimerStop(w http.ResponseWriter, r *http.Request) {
@@ -229,7 +229,7 @@ func (p *Plugin) handleTimerStop(w http.ResponseWriter, r *http.Request) {
 	if p.writeStoreError(w, err) {
 		return
 	}
-	p.writeJSON(w, http.StatusOK, map[string]interface{}{"entry": entry})
+	p.writeJSON(w, http.StatusOK, map[string]any{"entry": entry})
 }
 
 func (p *Plugin) handleBreakStart(w http.ResponseWriter, r *http.Request) {
@@ -238,7 +238,7 @@ func (p *Plugin) handleBreakStart(w http.ResponseWriter, r *http.Request) {
 	if p.writeStoreError(w, err) {
 		return
 	}
-	p.writeJSON(w, http.StatusOK, map[string]interface{}{"entry": entry})
+	p.writeJSON(w, http.StatusOK, map[string]any{"entry": entry})
 }
 
 func (p *Plugin) handleBreakStop(w http.ResponseWriter, r *http.Request) {
@@ -247,7 +247,7 @@ func (p *Plugin) handleBreakStop(w http.ResponseWriter, r *http.Request) {
 	if p.writeStoreError(w, err) {
 		return
 	}
-	p.writeJSON(w, http.StatusOK, map[string]interface{}{"entry": entry})
+	p.writeJSON(w, http.StatusOK, map[string]any{"entry": entry})
 }
 
 // --- Entry handlers ---
@@ -265,7 +265,7 @@ func (p *Plugin) handleListEntries(w http.ResponseWriter, r *http.Request) {
 	if entries == nil {
 		entries = []*store.TimeEntry{}
 	}
-	p.writeJSON(w, http.StatusOK, map[string]interface{}{"entries": entries})
+	p.writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
 }
 
 func (p *Plugin) handleCreateEntry(w http.ResponseWriter, r *http.Request) {
@@ -302,7 +302,7 @@ func (p *Plugin) handleCreateEntry(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	p.writeJSON(w, http.StatusCreated, map[string]interface{}{"entry": &entry})
+	p.writeJSON(w, http.StatusCreated, map[string]any{"entry": &entry})
 }
 
 func (p *Plugin) handleUpdateEntry(w http.ResponseWriter, r *http.Request) {
@@ -365,7 +365,7 @@ func (p *Plugin) handleUpdateEntry(w http.ResponseWriter, r *http.Request) {
 	if p.writeStoreError(w, p.store.Update(existing)) {
 		return
 	}
-	p.writeJSON(w, http.StatusOK, map[string]interface{}{"entry": existing})
+	p.writeJSON(w, http.StatusOK, map[string]any{"entry": existing})
 }
 
 func (p *Plugin) handleDeleteEntry(w http.ResponseWriter, r *http.Request) {
@@ -476,7 +476,7 @@ func (p *Plugin) handleSuggestions(w http.ResponseWriter, r *http.Request) {
 	if notes == nil {
 		notes = []string{}
 	}
-	p.writeJSON(w, http.StatusOK, map[string]interface{}{"projects": projects, "notes": notes})
+	p.writeJSON(w, http.StatusOK, map[string]any{"projects": projects, "notes": notes})
 }
 
 // --- Config handler ---
@@ -486,7 +486,7 @@ func (p *Plugin) handleSuggestions(w http.ResponseWriter, r *http.Request) {
 // it (the auth middleware already enforces a session).
 func (p *Plugin) handleConfig(w http.ResponseWriter, r *http.Request) {
 	cfg := p.getConfiguration()
-	p.writeJSON(w, http.StatusOK, map[string]interface{}{
+	p.writeJSON(w, http.StatusOK, map[string]any{
 		"approval_enabled": cfg.EnableApproval,
 	})
 }
@@ -533,7 +533,7 @@ func (p *Plugin) transition(w http.ResponseWriter, userID string, from, to int64
 	if p.writeStoreError(w, err) {
 		return
 	}
-	p.writeJSON(w, http.StatusOK, map[string]interface{}{"updated": n})
+	p.writeJSON(w, http.StatusOK, map[string]any{"updated": n})
 }
 
 func (p *Plugin) handleTimesheetSubmit(w http.ResponseWriter, r *http.Request) {
@@ -668,7 +668,7 @@ func (p *Plugin) handleAdminEntries(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	p.writeJSON(w, http.StatusOK, map[string]interface{}{"entries": entries, "usernames": usernames})
+	p.writeJSON(w, http.StatusOK, map[string]any{"entries": entries, "usernames": usernames})
 }
 
 func (p *Plugin) handleAdminExport(w http.ResponseWriter, r *http.Request) {

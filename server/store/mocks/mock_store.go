@@ -48,7 +48,7 @@ func (m *MockStore) StartTimer(userID, project, description string, now int64) (
 }
 
 // StartTimer indicates an expected call of StartTimer.
-func (mr *MockStoreMockRecorder) StartTimer(userID, project, description, now interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) StartTimer(userID, project, description, now any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTimer", reflect.TypeOf((*MockStore)(nil).StartTimer), userID, project, description, now)
 }
@@ -63,7 +63,7 @@ func (m *MockStore) StopTimer(userID string, now int64) (*store.TimeEntry, error
 }
 
 // StopTimer indicates an expected call of StopTimer.
-func (mr *MockStoreMockRecorder) StopTimer(userID, now interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) StopTimer(userID, now any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopTimer", reflect.TypeOf((*MockStore)(nil).StopTimer), userID, now)
 }
@@ -78,7 +78,7 @@ func (m *MockStore) StartBreak(userID string, now int64) (*store.TimeEntry, erro
 }
 
 // StartBreak indicates an expected call of StartBreak.
-func (mr *MockStoreMockRecorder) StartBreak(userID, now interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) StartBreak(userID, now any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartBreak", reflect.TypeOf((*MockStore)(nil).StartBreak), userID, now)
 }
@@ -93,7 +93,7 @@ func (m *MockStore) StopBreak(userID string, now int64) (*store.TimeEntry, error
 }
 
 // StopBreak indicates an expected call of StopBreak.
-func (mr *MockStoreMockRecorder) StopBreak(userID, now interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) StopBreak(userID, now any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopBreak", reflect.TypeOf((*MockStore)(nil).StopBreak), userID, now)
 }
@@ -108,7 +108,7 @@ func (m *MockStore) GetRunning(userID string) (*store.TimeEntry, error) {
 }
 
 // GetRunning indicates an expected call of GetRunning.
-func (mr *MockStoreMockRecorder) GetRunning(userID interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) GetRunning(userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRunning", reflect.TypeOf((*MockStore)(nil).GetRunning), userID)
 }
@@ -123,7 +123,7 @@ func (m *MockStore) Get(id string) (*store.TimeEntry, error) {
 }
 
 // Get indicates an expected call of Get.
-func (mr *MockStoreMockRecorder) Get(id interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) Get(id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockStore)(nil).Get), id)
 }
@@ -138,7 +138,7 @@ func (m *MockStore) List(userID string, from, to int64) ([]*store.TimeEntry, err
 }
 
 // List indicates an expected call of List.
-func (mr *MockStoreMockRecorder) List(userID, from, to interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) List(userID, from, to any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockStore)(nil).List), userID, from, to)
 }
@@ -153,7 +153,7 @@ func (m *MockStore) ListAll(userID string, from, to int64) ([]*store.TimeEntry, 
 }
 
 // ListAll indicates an expected call of ListAll.
-func (mr *MockStoreMockRecorder) ListAll(userID, from, to interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) ListAll(userID, from, to any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListAll", reflect.TypeOf((*MockStore)(nil).ListAll), userID, from, to)
 }
@@ -167,7 +167,7 @@ func (m *MockStore) Create(e *store.TimeEntry) error {
 }
 
 // Create indicates an expected call of Create.
-func (mr *MockStoreMockRecorder) Create(e interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) Create(e any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockStore)(nil).Create), e)
 }
@@ -181,7 +181,7 @@ func (m *MockStore) Update(e *store.TimeEntry) error {
 }
 
 // Update indicates an expected call of Update.
-func (mr *MockStoreMockRecorder) Update(e interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) Update(e any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockStore)(nil).Update), e)
 }
@@ -195,7 +195,7 @@ func (m *MockStore) Delete(userID, id string) error {
 }
 
 // Delete indicates an expected call of Delete.
-func (mr *MockStoreMockRecorder) Delete(userID, id interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) Delete(userID, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockStore)(nil).Delete), userID, id)
 }
@@ -210,7 +210,7 @@ func (m *MockStore) SetStatusRange(userID string, from, to int64, fromStatus, to
 }
 
 // SetStatusRange indicates an expected call of SetStatusRange.
-func (mr *MockStoreMockRecorder) SetStatusRange(userID, from, to, fromStatus, toStatus interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) SetStatusRange(userID, from, to, fromStatus, toStatus any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetStatusRange", reflect.TypeOf((*MockStore)(nil).SetStatusRange), userID, from, to, fromStatus, toStatus)
 }
@@ -226,7 +226,7 @@ func (m *MockStore) Suggestions(userID string, limit int) ([]string, []string, e
 }
 
 // Suggestions indicates an expected call of Suggestions.
-func (mr *MockStoreMockRecorder) Suggestions(userID, limit interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) Suggestions(userID, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Suggestions", reflect.TypeOf((*MockStore)(nil).Suggestions), userID, limit)
 }
