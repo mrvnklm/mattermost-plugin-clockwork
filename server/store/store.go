@@ -3,7 +3,23 @@
 // implementation lives in sqlstore.go.
 package store
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/mattermost/mattermost/server/public/model"
+)
+
+// Sanity bounds for manually created/edited entries. These guard against
+// fat-finger and malicious inputs (year-long spans, far-future timestamps) that
+// would otherwise distort reports. They are deliberately generous so legitimate
+// overnight or long shifts are not rejected.
+const (
+	// maxEntryMillis caps a single entry's gross span (start→end).
+	maxEntryMillis = 24 * 60 * 60 * 1000 // 24h
+	// futureSkewMillis tolerates minor client/server clock skew on end_at so a
+	// just-now clock-out is never rejected as "in the future".
+	futureSkewMillis = 5 * 60 * 1000 // 5m
+)
 
 // Sentinel errors returned by Store implementations. The API layer maps these
 // to HTTP status codes; the command layer maps them to user-facing messages.
@@ -25,6 +41,20 @@ var (
 	ErrNotFound = errors.New("entry not found")
 )
 
+// Approval-workflow statuses for a TimeEntry. The lifecycle is
+// open → submitted → approved, with reject (submitted→open) and reopen
+// (approved→open) returning an entry to the editable state.
+const (
+	// StatusOpen is the default: the entry is editable by its owner.
+	StatusOpen = "open"
+	// StatusSubmitted means the owner has submitted the entry for approval; it
+	// is locked for the owner and awaits an admin decision.
+	StatusSubmitted = "submitted"
+	// StatusApproved means an admin has approved the entry; it stays locked
+	// until an admin reopens it.
+	StatusApproved = "approved"
+)
+
 // TimeEntry is a single work-time record (one clock-in → clock-out cycle).
 //
 // Time fields are UTC unix milliseconds. A zero value means "unset":
@@ -42,9 +72,20 @@ type TimeEntry struct {
 	BreakStartedAt int64  `json:"break_started_at"` // UTC unix millis; 0 ⇒ not on break
 	Project        string `json:"project"`          // optional (hybrid model)
 	Description    string `json:"description"`      // optional (hybrid model)
-	Locked         bool   `json:"locked"`           // reserved for v2 approval/lock workflow
+	Status         string `json:"status"`           // open|submitted|approved (approval workflow)
+	Locked         bool   `json:"locked"`           // DERIVED: status != "open"; kept for the existing lock banner
 	CreatedAt      int64  `json:"created_at"`
 	UpdatedAt      int64  `json:"updated_at"`
+}
+
+// syncLocked derives the Locked convenience flag from Status. Locked is a pure
+// function of Status (locked == status != open), kept in the JSON so the
+// existing frontend lock banner keeps working without referencing status.
+func (e *TimeEntry) syncLocked() {
+	if e.Status == "" {
+		e.Status = StatusOpen
+	}
+	e.Locked = e.Status != StatusOpen
 }
 
 // IsRunning reports whether the entry is still open (no end time).
@@ -73,8 +114,16 @@ func (e *TimeEntry) NetSeconds(now int64) int64 {
 	return net
 }
 
-// Validate checks invariants for a manually created or edited entry.
+// Validate checks invariants for a manually created or edited entry, using the
+// current server time for the not-in-future bound. See ValidateAt for the
+// deterministic, testable form.
 func (e *TimeEntry) Validate() error {
+	return e.ValidateAt(model.GetMillis())
+}
+
+// ValidateAt checks invariants relative to the reference instant now (UTC unix
+// millis), so callers (and tests) can validate deterministically.
+func (e *TimeEntry) ValidateAt(now int64) error {
 	if e.UserID == "" {
 		return errors.New("user_id is required")
 	}
@@ -86,6 +135,18 @@ func (e *TimeEntry) Validate() error {
 	}
 	if e.BreakSeconds < 0 {
 		return errors.New("break_seconds must not be negative")
+	}
+	// Absolute-time sanity (only meaningful for closed entries).
+	if e.EndAt != 0 {
+		if e.EndAt-e.StartAt > maxEntryMillis {
+			return errors.New("entry duration exceeds the 24h limit")
+		}
+		if e.EndAt > now+futureSkewMillis {
+			return errors.New("end_at must not be in the future")
+		}
+	}
+	if e.StartAt > now+futureSkewMillis {
+		return errors.New("start_at must not be in the future")
 	}
 	return nil
 }
@@ -136,6 +197,14 @@ type Store interface {
 	// Delete removes an owned entry. Returns ErrLocked if locked, ErrNotFound
 	// if it does not exist or is not owned by userID.
 	Delete(userID, id string) error
+
+	// SetStatusRange transitions the user's entries whose StartAt is in
+	// [from, to) and whose current status equals fromStatus to toStatus,
+	// transactionally. Running (open-end) entries are never transitioned. It
+	// returns the number of rows affected. This single primitive powers
+	// submit/withdraw (user) and approve/reject/reopen (admin) by varying the
+	// status pair.
+	SetStatusRange(userID string, from, to int64, fromStatus, toStatus string) (int, error)
 
 	// Suggestions returns the user's distinct non-empty project and note values,
 	// most-recently-used first, each capped at limit. Used to power autocomplete.

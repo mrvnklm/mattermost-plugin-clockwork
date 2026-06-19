@@ -4,15 +4,13 @@
     "description": "Clockwork — Arbeitszeiterfassung for Mattermost: clock in/out with breaks, weekly timesheets, and CSV export.",
     "homepage_url": "https://github.com/mrvnklm/mattermost-plugin-clockwork",
     "support_url": "https://github.com/mrvnklm/mattermost-plugin-clockwork/issues",
+    "release_notes_url": "https://github.com/mrvnklm/mattermost-plugin-clockwork/releases",
     "icon_path": "assets/icon.svg",
     "min_server_version": "9.0.0",
     "server": {
         "executables": {
             "linux-amd64": "server/dist/plugin-linux-amd64",
-            "linux-arm64": "server/dist/plugin-linux-arm64",
-            "darwin-amd64": "server/dist/plugin-darwin-amd64",
-            "darwin-arm64": "server/dist/plugin-darwin-arm64",
-            "windows-amd64": "server/dist/plugin-windows-amd64.exe"
+            "linux-arm64": "server/dist/plugin-linux-arm64"
         }
     },
     "webapp": {
@@ -21,6 +19,21 @@
     "settings_schema": {
         "header": "Clockwork team report is available at Main Menu → “Clockwork — Team report” (system admins only).",
         "footer": "",
-        "settings": []
+        "settings": [
+            {
+                "key": "EnableApproval",
+                "display_name": "Freigabe-Workflow aktivieren",
+                "type": "bool",
+                "help_text": "Wenn aktiviert, können Mitarbeitende ihre Woche zur Freigabe einreichen; Administratoren bestätigen oder lehnen die eingereichten Zeiträume ab. Eingereichte und freigegebene Einträge sind für die Mitarbeitenden gesperrt. Standard: deaktiviert (reine Selbsterfassung wie bisher).",
+                "default": false
+            },
+            {
+                "key": "DefaultReportDays",
+                "display_name": "Standard-Berichtszeitraum (Tage)",
+                "type": "number",
+                "help_text": "Anzahl der Tage, die Berichte/Exporte zurückblicken, wenn kein expliziter Zeitraum gewählt wurde. 0 oder leer verwendet den eingebauten Standard von 7 Tagen.",
+                "default": 0
+            }
+        ]
     }
 }

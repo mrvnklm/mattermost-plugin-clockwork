@@ -24,6 +24,10 @@ type Plugin struct {
 	// store persists time entries in the Mattermost database.
 	store store.Store
 
+	// users resolves usernames and permission checks. It defaults to
+	// p.client.User but is an interface so handler tests can substitute a mock.
+	users userClient
+
 	// commandClient is the client used to register and execute slash commands.
 	commandClient command.Command
 
@@ -47,6 +51,7 @@ func (p *Plugin) OnActivate() error {
 		return errors.Wrap(err, "failed to initialize store")
 	}
 	p.store = sqlStore
+	p.users = &p.client.User
 
 	p.commandClient = command.NewCommandHandler(p.client, p.store)
 

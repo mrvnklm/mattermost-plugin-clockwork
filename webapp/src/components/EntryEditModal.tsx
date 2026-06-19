@@ -4,8 +4,9 @@
 import Client from 'client/Client';
 import type {TimeEntry} from 'client/Client';
 import {t} from 'i18n';
-import React, {useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {fromDatetimeInput, toDatetimeInput} from 'utils/time';
+import {useStableId} from 'utils/useStableId';
 
 type Props = {
 
@@ -14,6 +15,9 @@ type Props = {
     onClose: () => void;
     onSaved: () => void;
 };
+
+// Selector for the focusable elements inside the dialog (used by the focus trap).
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export default function EntryEditModal({entry, onClose, onSaved}: Props): JSX.Element {
     const isEdit = Boolean(entry);
@@ -26,8 +30,66 @@ export default function EntryEditModal({entry, onClose, onSaved}: Props): JSX.El
     const [description, setDescription] = useState(entry?.description ?? '');
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
+    const [confirmingDelete, setConfirmingDelete] = useState(false);
 
     const disabled = locked || busy;
+
+    // Unique ids tie each <label htmlFor> to its control and the dialog title to
+    // aria-labelledby. useId keeps multiple instances distinct.
+    const baseId = useStableId('cw-entry');
+    const titleId = `${baseId}-title`;
+    const ids = {
+        start: `${baseId}-start`,
+        end: `${baseId}-end`,
+        break: `${baseId}-break`,
+        project: `${baseId}-project`,
+        note: `${baseId}-note`,
+    };
+
+    const dialogRef = useRef<HTMLDivElement>(null);
+    const firstFieldRef = useRef<HTMLInputElement>(null);
+
+    // Move focus into the dialog on open so screen-reader/keyboard users land
+    // inside it (WCAG 2.4.3). The first field when editable; otherwise the first
+    // focusable control (e.g. the Cancel button) for a locked/read-only entry,
+    // whose inputs are disabled and thus not focusable.
+    useEffect(() => {
+        if (firstFieldRef.current && !disabled) {
+            firstFieldRef.current.focus();
+            return;
+        }
+        const first = dialogRef.current?.querySelector<HTMLElement>(FOCUSABLE);
+        first?.focus();
+
+        // Only on mount.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Escape closes; Tab is trapped within the dialog.
+    const onKeyDown = useCallback((e: React.KeyboardEvent) => {
+        if (e.key === 'Escape') {
+            e.stopPropagation();
+            onClose();
+            return;
+        }
+        if (e.key !== 'Tab' || !dialogRef.current) {
+            return;
+        }
+        const nodes = dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE);
+        if (nodes.length === 0) {
+            return;
+        }
+        const first = nodes[0];
+        const last = nodes[nodes.length - 1];
+        const active = document.activeElement;
+        if (e.shiftKey && active === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && active === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    }, [onClose]);
 
     const submit = async () => {
         setError('');
@@ -81,6 +143,7 @@ export default function EntryEditModal({entry, onClose, onSaved}: Props): JSX.El
             onClose();
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
+            setConfirmingDelete(false);
         } finally {
             setBusy(false);
         }
@@ -92,17 +155,34 @@ export default function EntryEditModal({entry, onClose, onSaved}: Props): JSX.El
             onClick={onClose}
         >
             <div
+                ref={dialogRef}
                 className='tt-modal'
+                role='dialog'
+                aria-modal={true}
+                aria-labelledby={titleId}
                 onClick={(e) => e.stopPropagation()}
+                onKeyDown={onKeyDown}
             >
-                <h3 className='tt-modal__title'>{isEdit ? t('editEntry') : t('newEntry')}</h3>
+                <h3
+                    className='tt-modal__title'
+                    id={titleId}
+                >
+                    {isEdit ? t('editEntry') : t('newEntry')}
+                </h3>
 
                 {locked && <div className='tt-banner tt-banner--warn'>{t('locked')}</div>}
 
                 <div className='tt-modal__row'>
                     <div>
-                        <label className='tt-modal__label'>{t('startTime')}</label>
+                        <label
+                            className='tt-modal__label'
+                            htmlFor={ids.start}
+                        >
+                            {t('startTime')}
+                        </label>
                         <input
+                            ref={firstFieldRef}
+                            id={ids.start}
                             type='datetime-local'
                             className='tt-field'
                             value={start}
@@ -111,8 +191,14 @@ export default function EntryEditModal({entry, onClose, onSaved}: Props): JSX.El
                         />
                     </div>
                     <div>
-                        <label className='tt-modal__label'>{t('endTime')}</label>
+                        <label
+                            className='tt-modal__label'
+                            htmlFor={ids.end}
+                        >
+                            {t('endTime')}
+                        </label>
                         <input
+                            id={ids.end}
                             type='datetime-local'
                             className='tt-field'
                             value={end}
@@ -122,8 +208,14 @@ export default function EntryEditModal({entry, onClose, onSaved}: Props): JSX.El
                     </div>
                 </div>
 
-                <label className='tt-modal__label'>{t('breakMinutes')}</label>
+                <label
+                    className='tt-modal__label'
+                    htmlFor={ids.break}
+                >
+                    {t('breakMinutes')}
+                </label>
                 <input
+                    id={ids.break}
                     type='number'
                     min={0}
                     className='tt-field'
@@ -135,8 +227,14 @@ export default function EntryEditModal({entry, onClose, onSaved}: Props): JSX.El
                     }}
                 />
 
-                <label className='tt-modal__label'>{t('project')}</label>
+                <label
+                    className='tt-modal__label'
+                    htmlFor={ids.project}
+                >
+                    {t('project')}
+                </label>
                 <input
+                    id={ids.project}
                     type='text'
                     className='tt-field'
                     list='clockwork-projects'
@@ -145,8 +243,14 @@ export default function EntryEditModal({entry, onClose, onSaved}: Props): JSX.El
                     onChange={(e) => setProject(e.target.value)}
                 />
 
-                <label className='tt-modal__label'>{t('note')}</label>
+                <label
+                    className='tt-modal__label'
+                    htmlFor={ids.note}
+                >
+                    {t('note')}
+                </label>
                 <input
+                    id={ids.note}
                     type='text'
                     className='tt-field'
                     list='clockwork-notes'
@@ -160,14 +264,38 @@ export default function EntryEditModal({entry, onClose, onSaved}: Props): JSX.El
                 <div className='tt-modal__foot'>
                     <div>
                         {isEdit && !locked && (
-                            <button
-                                className='btn btn-tertiary'
-                                style={{color: 'var(--error-text, #d24b4e)'}}
-                                disabled={busy}
-                                onClick={remove}
-                            >
-                                {t('delete')}
-                            </button>
+                            confirmingDelete ? (
+                                <span className='tt-actbtns'>
+                                    <span
+                                        className='tt-modal__label'
+                                        style={{margin: 0}}
+                                    >{t('confirmDelete')}</span>
+                                    <button
+                                        className='tt-btn-sm'
+                                        style={{color: 'var(--error-text, #d24b4e)'}}
+                                        disabled={busy}
+                                        onClick={remove}
+                                    >
+                                        {t('delete')}
+                                    </button>
+                                    <button
+                                        className='tt-btn-sm'
+                                        disabled={busy}
+                                        onClick={() => setConfirmingDelete(false)}
+                                    >
+                                        {t('cancel')}
+                                    </button>
+                                </span>
+                            ) : (
+                                <button
+                                    className='btn btn-tertiary'
+                                    style={{color: 'var(--error-text, #d24b4e)'}}
+                                    disabled={busy}
+                                    onClick={() => setConfirmingDelete(true)}
+                                >
+                                    {t('delete')}
+                                </button>
+                            )
                         )}
                     </div>
                     <div style={{display: 'flex', gap: 8}}>

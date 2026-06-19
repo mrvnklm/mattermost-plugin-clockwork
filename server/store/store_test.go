@@ -99,7 +99,38 @@ func TestTimeEntry_NetSeconds(t *testing.T) {
 	}
 }
 
+func TestTimeEntry_syncLocked(t *testing.T) {
+	tests := []struct {
+		name       string
+		status     string
+		wantStatus string
+		wantLocked bool
+	}{
+		{"empty status normalizes to open, unlocked", "", StatusOpen, false},
+		{"open is unlocked", StatusOpen, StatusOpen, false},
+		{"submitted is locked", StatusSubmitted, StatusSubmitted, true},
+		{"approved is locked", StatusApproved, StatusApproved, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := TimeEntry{Status: tt.status}
+			e.syncLocked()
+			if e.Status != tt.wantStatus {
+				t.Errorf("Status = %q, want %q", e.Status, tt.wantStatus)
+			}
+			if e.Locked != tt.wantLocked {
+				t.Errorf("Locked = %v, want %v", e.Locked, tt.wantLocked)
+			}
+		})
+	}
+}
+
 func TestTimeEntry_Validate(t *testing.T) {
+	// refNow is a fixed "current time" so the not-in-future and max-duration
+	// bounds are deterministic. ValidateAt(refNow) is used instead of Validate()
+	// (which reads the wall clock) for repeatability.
+	const refNow = int64(1_700_000_000_000) // ~2023-11-14 UTC
+
 	tests := []struct {
 		name    string
 		entry   TimeEntry
@@ -135,12 +166,37 @@ func TestTimeEntry_Validate(t *testing.T) {
 			entry:   TimeEntry{UserID: "user1", StartAt: 1000, BreakSeconds: -5},
 			wantErr: true,
 		},
+		{
+			name:    "duration over the 24h cap",
+			entry:   TimeEntry{UserID: "user1", StartAt: 1000, EndAt: 1000 + maxEntryMillis + 1},
+			wantErr: true,
+		},
+		{
+			name:    "duration exactly at the 24h cap is allowed",
+			entry:   TimeEntry{UserID: "user1", StartAt: 1000, EndAt: 1000 + maxEntryMillis},
+			wantErr: false,
+		},
+		{
+			name:    "end in the future beyond skew",
+			entry:   TimeEntry{UserID: "user1", StartAt: refNow - 1000, EndAt: refNow + futureSkewMillis + 1000},
+			wantErr: true,
+		},
+		{
+			name:    "end just within future skew is allowed",
+			entry:   TimeEntry{UserID: "user1", StartAt: refNow - 1000, EndAt: refNow + futureSkewMillis - 1000},
+			wantErr: false,
+		},
+		{
+			name:    "start in the future beyond skew",
+			entry:   TimeEntry{UserID: "user1", StartAt: refNow + futureSkewMillis + 1000},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.entry.Validate()
+			err := tt.entry.ValidateAt(refNow)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ValidateAt() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

@@ -8,7 +8,7 @@ Built compliance-first for German *Arbeitszeiterfassung* (records start, end,
 breaks and net daily hours), with an optional project/description per entry.
 
 - **Plugin id:** `com.vsjwl.mm-time-tracking`
-- **Min server version:** 9.0.0 (self-hosted). **Postgres recommended** (the DB newer Mattermost supports); **MySQL** also works and is verified — kept as a nice-to-have for older deployments.
+- **Min server version:** 9.0.0 (self-hosted). **PostgreSQL** is the target database — it's Mattermost's standard since v8.0 and the only DB [supported from Mattermost v11](https://docs.mattermost.com/product-overview/deprecated-features.html). MySQL still works (and is covered by the integration suite) for older deployments, but is deprecated upstream; new installs should use PostgreSQL.
 - **License:** Apache-2.0 · German + English UI
 
 ## Features
@@ -19,8 +19,15 @@ breaks and net daily hours), with an optional project/description per entry.
   - **Today** list and a **weekly timesheet** (start, end, breaks, net hours, week total).
   - Add / edit / delete entries manually (timezone-correct, DST-safe).
 - **Slash command** `/track in|out|break|status` for fast clocking.
-- **Team report** (full-page, system-admins only — Main Menu → “Clockwork — Team report”):
-  date-range filter, per-user filter, totals, and **CSV export** across all users.
+- **Clockwork product** (full-page, in the product switcher next to Channels/Playbooks):
+  - **Every user** gets their own time report — date range, totals, per-project breakdown,
+    CSV export, and (with the approval workflow on) submit/withdraw.
+  - **System admins** get a **My time ↔ Team report** toggle; the team report adds per-user
+    drill-down and the approval actions, with a CSV export that honours the selected user.
+- **Optional approval workflow** (off by default — see [Configuration](#configuration)):
+  employees **submit a week** for approval; admins **approve** (locks the entries from
+  further edits) or **reject** (reopens them). Submitted/approved entries are read-only
+  for their owner.
 - **CSV export** for your own records, and for admins across the team (formula-injection safe).
 - Net hours = `end − start − breaks`; days are grouped in each user's Mattermost timezone.
 
@@ -33,8 +40,10 @@ breaks and net daily hours), with an optional project/description per entry.
 A single bundle: a **Go server** component (slash command, REST API, SQL persistence
 in the Mattermost database) and a **React/TypeScript webapp** (RHS panel + full-page
 admin report). One table, `timetracking_entries`; a running entry is a row with
-`end_at IS NULL`. The server authorizes every request via the `Mattermost-User-ID`
-header; admin endpoints require `PermissionManageSystem`.
+`end_at IS NULL`, and each entry carries an approval `status` (`open` → `submitted` →
+`approved`) that gates owner edits. The server authorizes every request via the
+`Mattermost-User-ID` header; admin endpoints require `PermissionManageSystem`, and the
+approval-workflow endpoints are feature-flagged off by default.
 
 ```
 plugin.json                 manifest (id, min_server_version, icon)
@@ -89,13 +98,34 @@ Or upload `dist/*.tar.gz` via **System Console → Plugins → Management**.
 - `/track in` · `/track out` · `/track break` · `/track status`.
 - System admins: **Main Menu → “Clockwork — Team report”** for the team dashboard + export.
 
+## Configuration
+
+All settings live in **System Console → Plugins → Clockwork**:
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| **Enable approval workflow** (`EnableApproval`) | bool | `false` | Turns on submit → approve. When off, Clockwork is pure self-tracking and the workflow endpoints return `404`. |
+| **Default report window** (`DefaultReportDays`) | number | `0` (= 7 days) | Lookback in days for reports/exports when no explicit range is requested. |
+
+With the approval workflow **on**:
+
+- Employees see a **“Submit week”** button in the timesheet; submitting locks that week's
+  entries from edits and marks them *submitted*. They can **withdraw** until an admin acts.
+- In the **Team report**, admins pick a user + range and **Approve** (→ *approved*, stays
+  locked), **Reject** (→ reopened/editable), or **Reopen** an approved range.
+
 ## Tests
 
-- **Go unit tests**: net-hours math, break accumulation, validation (`server/store`).
-- **Manual / integration E2E**: see [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) and the
-  verification checklist. The plugin has been exercised end-to-end against Postgres
-  (start/break/stop, manual add/edit, weekly totals, self & admin CSV export, permission
-  gates, and the admin team report).
+- **Go unit + handler tests** (`make test`): net-hours math, break accumulation,
+  validation, CSV-safety, range parsing, error→HTTP mapping, and the HTTP handlers
+  (auth, ownership, admin gating, the approval transitions) via a mocked store.
+- **Webapp tests**: timezone/DST round-trips in `utils/time`, and the CSRF-aware REST
+  client.
+- **DB integration suite** (`make test-integration`, build tag `integration`): runs the
+  SQL store + migrations against real **Postgres and MySQL** (migration idempotency, the
+  single-running-entry invariant, and the status transitions). Skipped unless the DB DSN
+  env vars are set; CI runs it with service containers.
+- The server⇄webapp REST contract is documented in [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md).
 
 ## Publishing / Marketplace
 

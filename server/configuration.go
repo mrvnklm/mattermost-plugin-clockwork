@@ -17,7 +17,17 @@ import (
 //
 // If you add non-reference types to your configuration struct, be sure to rewrite Clone as a deep
 // copy appropriate for your types.
-type configuration struct{}
+type configuration struct {
+	// EnableApproval turns on the optional submit → approve workflow. When
+	// false (the default) Clockwork behaves as pure self-tracking and all
+	// workflow endpoints return 404.
+	EnableApproval bool
+
+	// DefaultReportDays overrides the lookback (in days) used by
+	// list/summary/export endpoints when no explicit from/to range is supplied.
+	// A value <= 0 keeps the built-in 7-day default. Wired in parseRange.
+	DefaultReportDays int
+}
 
 // Clone shallow copies the configuration. Your implementation may require a deep copy if
 // your configuration has reference types.

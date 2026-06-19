@@ -1,39 +1,24 @@
 // Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import {setLocale} from 'i18n';
+import {setLocale, t} from 'i18n';
 import manifest from 'manifest';
 import React from 'react';
 import type {Store} from 'redux';
+import {setIsAdmin} from 'session';
 import {setTimezone} from 'utils/time';
 
 import type {GlobalState} from '@mattermost/types/store';
 
-import AdminConsole from 'components/admin/AdminConsole';
+import ClockworkApp from 'components/ClockworkApp';
+import {ClockIcon} from 'components/icons';
 import RHSView from 'components/rhs/RHSView';
 
 import type {PluginRegistry} from 'types/mattermost-webapp';
 
-// Simple inline clock icon for the channel header button.
-const ClockIcon = () => (
-    <svg
-        width='20'
-        height='20'
-        viewBox='0 0 24 24'
-        fill='none'
-        stroke='currentColor'
-        strokeWidth='2'
-        strokeLinecap='round'
-        strokeLinejoin='round'
-        aria-hidden='true'
-    >
-        <circle
-            cx='12'
-            cy='12'
-            r='9'
-        />
-        <polyline points='12 7 12 12 16 14'/>
-    </svg>
+// Header rendered in the global header bar while the Clockwork product is active.
+const ClockworkProductHeader = (): JSX.Element => (
+    <span className='tt-product__title'>{t('title')}</span>
 );
 
 export default class Plugin {
@@ -55,20 +40,17 @@ export default class Plugin {
             // ignore — i18n defaults to German, timezone to browser-local
         }
 
-        const {showRHSPlugin} = registry.registerRightHandSidebarComponent(RHSView, 'Clockwork');
+        const {showRHSPlugin} = registry.registerRightHandSidebarComponent(RHSView, t('rhsTitle'));
 
         registry.registerChannelHeaderButtonAction(
-            <ClockIcon/>,
+            <ClockIcon size={20}/>,
             () => store.dispatch(showRHSPlugin),
-            'Clockwork',
-            'Track work time',
+            t('rhsTitle'),
+            t('channelHeaderTooltip'),
         );
 
-        // Dedicated full-page team report at /<team>/<plugin-id>/admin. The route
-        // is always registered (the server authorizes every request); the menu
-        // entry that links to it is only added for system admins.
-        registry.registerNeedsTeamRoute('/admin', AdminConsole);
-
+        // Capture whether the user is a system admin so the product can offer the
+        // team-report toggle. The server still authorizes every admin request.
         let isAdmin = false;
         try {
             const state: any = store.getState();
@@ -78,20 +60,21 @@ export default class Plugin {
         } catch {
             isAdmin = false;
         }
+        setIsAdmin(isAdmin);
 
-        if (isAdmin && registry.registerMainMenuAction) {
-            registry.registerMainMenuAction(
-                'Clockwork — Team report',
-                () => {
-                    const s: any = store.getState();
-                    const teamId = s?.entities?.teams?.currentTeamId;
-                    const team = teamId && s?.entities?.teams?.teams?.[teamId];
-                    if (team) {
-                        window.location.assign(`/${team.name}/${manifest.id}/admin`);
-                    }
-                },
-                <ClockIcon/>,
-            );
+        // Register Clockwork as a full product: it appears in the product switcher
+        // next to Channels/Playbooks/Boards and opens a full-page time report.
+        // Every user gets their own report; admins get a team-report toggle inside.
+        if (registry.registerProduct) {
+            registry.registerProduct({
+                baseURL: '/clockwork',
+                switcherIcon: 'clock-outline',
+                switcherText: t('title'),
+                switcherLinkURL: '/clockwork',
+                mainComponent: ClockworkApp,
+                headerCentreComponent: ClockworkProductHeader,
+                showTeamSidebar: false,
+            });
         }
     }
 }

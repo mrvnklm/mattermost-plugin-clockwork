@@ -9,7 +9,8 @@ import {ensureStyles} from 'styles';
 import {formatHMS, localClock, localDayKey, netSeconds, weekRange} from 'utils/time';
 
 import EntryEditModal from 'components/EntryEditModal';
-import {PauseIcon, PlayIcon, PlusIcon, StopIcon} from 'components/icons';
+import {ChevronLeftIcon, ChevronRightIcon, PauseIcon, PlayIcon, PlusIcon, StopIcon} from 'components/icons';
+import StatusBadge from 'components/StatusBadge';
 import WeeklyTimesheet from 'components/WeeklyTimesheet';
 
 ensureStyles();
@@ -22,16 +23,47 @@ export default function RHSView(): JSX.Element {
     const [description, setDescription] = useState('');
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [editing, setEditing] = useState<{entry: TimeEntry | null} | null>(null);
     const [suggest, setSuggest] = useState<{projects: string[]; notes: string[]}>({projects: [], notes: []});
+    const [approvalEnabled, setApprovalEnabled] = useState(false);
+
+    // weekOffset: 0 = current week, -1 = previous, +1 = next. The visible week
+    // shifts by 7 days from "now".
+    const [weekOffset, setWeekOffset] = useState(0);
+
+    const range = useMemo(() => {
+        // Step in calendar-week space: anchor on this week's Monday (tz-aware,
+        // DST-safe via weekRange), shift by whole weeks, and re-anchor at midday
+        // so a DST ±1h drift can never push the reference across a week boundary.
+        const thisMonday = weekRange(new Date()).from;
+        const ref = new Date(thisMonday + (weekOffset * 7 * 24 * 60 * 60 * 1000) + (12 * 60 * 60 * 1000));
+        return weekRange(ref);
+    }, [weekOffset]);
+
+    // Fetch the (immutable for the session) config once on mount.
+    useEffect(() => {
+        let cancelled = false;
+        Client.config().
+            then((c) => {
+                if (!cancelled) {
+                    setApprovalEnabled(Boolean(c.approval_enabled));
+                }
+            }).
+            catch(() => {
+                // approval defaults to off; ignore (older server / no perms)
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     const refetch = useCallback(async () => {
         setError('');
         try {
-            const {from, to} = weekRange(new Date());
             const [cur, list, sug] = await Promise.all([
                 Client.getCurrent(),
-                Client.listEntries(from, to),
+                Client.listEntries(range.from, range.to),
                 Client.suggestions(),
             ]);
             setCurrent(cur.entry);
@@ -39,8 +71,10 @@ export default function RHSView(): JSX.Element {
             setSuggest(sug);
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
+        } finally {
+            setLoading(false);
         }
-    }, []);
+    }, [range]);
 
     useEffect(() => {
         refetch();
@@ -78,13 +112,23 @@ export default function RHSView(): JSX.Element {
     const onBreakToggle = () => run(() =>
         (current && current.break_started_at ? Client.breakStop() : Client.breakStart()));
 
+    const onSubmitWeek = () => run(() => Client.submitTimesheet(range.from, range.to));
+    const onWithdrawWeek = () => run(() => Client.withdrawTimesheet(range.from, range.to));
+
     const todayKey = localDayKey(now);
 
     // Today's closed entries (the running one is shown in the hero above).
+    // Only meaningful for the current week.
     const todayEntries = useMemo(
-        () => entries.filter((e) => e.end_at !== 0 && localDayKey(e.start_at) === todayKey),
-        [entries, todayKey],
+        () => (weekOffset === 0 ? entries.filter((e) => e.end_at !== 0 && localDayKey(e.start_at) === todayKey) : []),
+        [entries, todayKey, weekOffset],
     );
+
+    // Closed entries in the visible week (running entries can't be submitted).
+    const closed = useMemo(() => entries.filter((e) => e.end_at !== 0), [entries]);
+    const openCount = useMemo(() => closed.filter((e) => e.status === 'open').length, [closed]);
+    const submittedCount = useMemo(() => closed.filter((e) => e.status === 'submitted').length, [closed]);
+    const approvedCount = useMemo(() => closed.filter((e) => e.status === 'approved').length, [closed]);
 
     const onBreak = Boolean(current && current.break_started_at);
     const elapsed = current ? netSeconds(current, now) : 0;
@@ -177,38 +221,65 @@ export default function RHSView(): JSX.Element {
                 )}
             </div>
 
-            {/* Today */}
-            <div className='tt__section'>
-                <div className='tt__label'>{t('today')}</div>
-                {todayEntries.length === 0 ? (
-                    <div className='tt-empty'>{t('noEntries')}</div>
-                ) : (
-                    <div className='tt-list'>
-                        {todayEntries.map((e) => (
-                            <button
-                                key={e.id}
-                                className='tt-row tt-row--btn'
-                                onClick={() => setEditing({entry: e})}
-                                title={t('edit')}
-                            >
-                                <div className='tt-row__main'>
-                                    <div className='tt-row__top'>
-                                        <span>{localClock(e.start_at)}{' – '}{localClock(e.end_at)}</span>
-                                        {e.project && <span className='tt-chip'>{e.project}</span>}
+            {/* Today (current week only) */}
+            {weekOffset === 0 && (
+                <div className='tt__section'>
+                    <div className='tt__label'>{t('today')}</div>
+                    {todayEntries.length === 0 ? (
+                        <div className='tt-empty'>{t('noEntries')}</div>
+                    ) : (
+                        <div className='tt-list'>
+                            {todayEntries.map((e) => (
+                                <button
+                                    key={e.id}
+                                    className='tt-row tt-row--btn'
+                                    onClick={() => setEditing({entry: e})}
+                                    title={t('edit')}
+                                >
+                                    <div className='tt-row__main'>
+                                        <div className='tt-row__top'>
+                                            <span>{localClock(e.start_at)}{' – '}{localClock(e.end_at)}</span>
+                                            {e.project && <span className='tt-chip'>{e.project}</span>}
+                                        </div>
+                                        {e.description && <div className='tt-note'>{e.description}</div>}
                                     </div>
-                                    {e.description && <div className='tt-note'>{e.description}</div>}
-                                </div>
-                                <span className='tt-dur'>{formatHMS(netSeconds(e, now))}</span>
-                            </button>
-                        ))}
-                    </div>
-                )}
-            </div>
+                                    <span className='tt-dur'>{formatHMS(netSeconds(e, now))}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Week */}
             <div className='tt__section'>
                 <div className='tt__label'>
-                    {t('week')}
+                    <span className='tt-weeknav'>
+                        <button
+                            className='tt-iconbtn'
+                            aria-label={t('prevWeek')}
+                            title={t('prevWeek')}
+                            onClick={() => setWeekOffset((v) => v - 1)}
+                        >
+                            <ChevronLeftIcon/>
+                        </button>
+                        {weekOffset === 0 ? t('week') : (
+                            <button
+                                className='tt-link'
+                                onClick={() => setWeekOffset(0)}
+                            >
+                                {t('thisWeek')}
+                            </button>
+                        )}
+                        <button
+                            className='tt-iconbtn'
+                            aria-label={t('nextWeek')}
+                            title={t('nextWeek')}
+                            onClick={() => setWeekOffset((v) => v + 1)}
+                        >
+                            <ChevronRightIcon/>
+                        </button>
+                    </span>
                     <button
                         className='tt-link'
                         onClick={() => setEditing({entry: null})}
@@ -216,11 +287,46 @@ export default function RHSView(): JSX.Element {
                         <PlusIcon/>{' '}{t('add')}
                     </button>
                 </div>
-                <WeeklyTimesheet
-                    entries={entries}
-                    now={now}
-                    onSelect={(entry) => setEditing({entry})}
-                />
+
+                {loading ? (
+                    <div className='tt-empty'>{t('loading')}</div>
+                ) : (
+                    <>
+                        <WeeklyTimesheet
+                            entries={entries}
+                            now={now}
+                            approvalEnabled={approvalEnabled}
+                            onSelect={(entry) => setEditing({entry})}
+                        />
+
+                        {approvalEnabled && closed.length > 0 && (
+                            <div className='tt-workflow'>
+                                {openCount > 0 && (
+                                    <button
+                                        className='btn btn-primary'
+                                        disabled={busy}
+                                        onClick={onSubmitWeek}
+                                    >
+                                        {t('submitWeek')}
+                                    </button>
+                                )}
+                                {submittedCount > 0 && (
+                                    <button
+                                        className='btn btn-tertiary'
+                                        disabled={busy}
+                                        onClick={onWithdrawWeek}
+                                    >
+                                        {t('withdraw')}
+                                    </button>
+                                )}
+                                {submittedCount > 0 && <StatusBadge status='submitted'/>}
+                                {openCount === 0 && submittedCount === 0 && approvedCount > 0 && (
+                                    <StatusBadge status='approved'/>
+                                )}
+                            </div>
+                        )}
+                    </>
+                )}
             </div>
 
             {editing && (
