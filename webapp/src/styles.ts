@@ -80,6 +80,15 @@ const CSS = `
 .tt-table .tt-act { width: 30px; text-align: right; padding-left: 0; }
 .tt-table tbody tr:hover { background: var(--tt-hover); }
 .tt-table tfoot td { border-top: 2px solid var(--tt-line); font-weight: 700; }
+/* Horizontal scroll fallback so a wide row (e.g. the extra STATUS column with
+   the approval workflow on) never clips the hours column in the narrow RHS. */
+.tt-tablewrap { width: 100%; overflow-x: auto; }
+/* Compact variant for the narrow RHS timesheet so all columns fit without scroll
+   in the common case (the full-page admin table keeps the roomier default). */
+.tt-table--compact { font-size: 12px; }
+.tt-table--compact th { padding: 5px 5px; }
+.tt-table--compact td { padding: 7px 5px; }
+.tt-table--compact .tt-badge { font-size: 9px; padding: 1px 4px; letter-spacing: 0; }
 .tt-iconbtn { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
   padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--tt-faint); cursor: pointer; }
 .tt-iconbtn:hover { background: var(--tt-hover); color: var(--center-channel-color, #3d3c40); }
@@ -105,12 +114,23 @@ const CSS = `
 /* admin team report (full-page route) — fill the grid content area */
 .tt-admin { box-sizing: border-box; grid-column: 1 / -1; grid-row: 1 / -1; width: 100%; height: 100%;
   overflow-y: auto; padding: 32px; background: var(--center-channel-bg, #fff); font-size: 14px; }
+/* product shell (registerProduct) — fills the grid content area; the tab bar is
+   fixed and the active report scrolls beneath it. */
+.tt-product { box-sizing: border-box; grid-column: 1 / -1; grid-row: 1 / -1; width: 100%; height: 100%;
+  display: flex; flex-direction: column; min-height: 0; background: var(--center-channel-bg, #fff); }
+.tt-product__tabs { flex: 0 0 auto; display: flex; gap: 6px; padding: 14px 32px 0; border-bottom: 1px solid var(--tt-line); }
+.tt-product > .tt-admin { grid-column: auto; grid-row: auto; height: auto; flex: 1 1 auto; min-height: 0; }
+.tt-product__title { font-weight: 600; }
+.tt-tab { appearance: none; border: none; background: transparent; padding: 8px 14px; font-size: 14px;
+  font-weight: 600; color: var(--tt-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tt-tab:hover { color: var(--center-channel-color, #3f4350); }
+.tt-tab.is-active { color: var(--button-bg, #1c58d9); border-bottom-color: var(--button-bg, #1c58d9); }
 .tt-admin__inner { max-width: 1100px; margin: 0 auto; }
 .tt-admin__title { margin: 0 0 4px; font-size: 20px; font-weight: 700; }
 .tt-admin__sub { margin: 0 0 20px; color: var(--tt-muted); font-size: 13px; }
 .tt-admin__bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 20px; }
 .tt-admin__field { display: flex; flex-direction: column; gap: 5px; }
-.tt-admin__field > label { font-size: 12px; font-weight: 600; color: var(--tt-muted); }
+.tt-admin__field > label, .tt-admin__field > .tt-fieldlabel { font-size: 12px; font-weight: 600; color: var(--tt-muted); }
 .tt-admin__field .tt-field { width: auto; min-width: 150px; margin: 0; }
 .tt-admin__spacer { flex: 1 1 auto; }
 .tt-admin__totals { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
@@ -118,6 +138,31 @@ const CSS = `
 .tt-admin__stat b { display: block; font-family: var(--tt-mono); font-size: 22px; font-variant-numeric: tabular-nums; }
 .tt-admin__stat span { font-size: 12px; color: var(--tt-muted); }
 .tt-admin__empty { padding: 40px; text-align: center; color: var(--tt-faint); }
+
+/* status badges (approval workflow) */
+.tt-badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; padding: 1px 7px; border-radius: 10px; white-space: nowrap; }
+.tt-badge--open { background: var(--tt-hover); color: var(--tt-muted); }
+.tt-badge--submitted { background: rgba(var(--away-indicator-rgb, 255,188,66), .18); color: var(--away-indicator, #cc8f00); }
+.tt-badge--approved { background: rgba(var(--online-indicator-rgb, 6,214,160), .18); color: var(--online-indicator, #06b384); }
+
+/* compact inline action buttons in admin tables */
+.tt-actbtns { display: inline-flex; gap: 6px; }
+.tt-btn-sm { padding: 3px 9px; border: 1px solid var(--tt-line); border-radius: 6px;
+  background: transparent; color: inherit; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.tt-btn-sm:hover:not(:disabled) { background: var(--tt-hover); }
+.tt-btn-sm:disabled { opacity: .5; cursor: default; }
+
+/* week navigation (RHS timesheet) */
+.tt-weeknav { display: inline-flex; align-items: center; gap: 2px; }
+.tt-weeknav__label { font-size: 11px; color: var(--tt-muted); min-width: 0; }
+
+/* submit-week action row */
+.tt-workflow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.tt-workflow .tt-badge { margin-left: auto; }
+
+/* tabular subsection title inside admin */
+.tt-admin__h3 { margin: 24px 0 8px; font-size: 14px; font-weight: 700; }
 `;
 
 export function ensureStyles(): void {

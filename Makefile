@@ -219,11 +219,12 @@ ifneq ($(MM_SERVICESETTINGS_ENABLEDEVELOPER),)
 	@echo Building plugin only for $(DEFAULT_GOOS)-$(DEFAULT_GOARCH) because MM_SERVICESETTINGS_ENABLEDEVELOPER is enabled
 	cd server && env CGO_ENABLED=0 $(GO) build $(GO_BUILD_FLAGS) $(GO_BUILD_GCFLAGS) -trimpath -o dist/plugin-$(DEFAULT_GOOS)-$(DEFAULT_GOARCH);
 else
+	# Production Mattermost servers run on Linux only (Mattermost itself ships
+	# Linux server builds), so we build linux/amd64 + linux/arm64. darwin/windows
+	# are dropped — for native local dev set MM_SERVICESETTINGS_ENABLEDEVELOPER to
+	# build just your host arch (above).
 	cd server && env CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) $(GO_BUILD_GCFLAGS) -trimpath -o dist/plugin-linux-amd64;
 	cd server && env CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(GO) build $(GO_BUILD_FLAGS) $(GO_BUILD_GCFLAGS) -trimpath -o dist/plugin-linux-arm64;
-	cd server && env CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) $(GO_BUILD_GCFLAGS) -trimpath -o dist/plugin-darwin-amd64;
-	cd server && env CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 $(GO) build $(GO_BUILD_FLAGS) $(GO_BUILD_GCFLAGS) -trimpath -o dist/plugin-darwin-arm64;
-	cd server && env CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) $(GO_BUILD_GCFLAGS) -trimpath -o dist/plugin-windows-amd64.exe;
 endif
 endif
 
@@ -360,6 +361,17 @@ ifneq ($(HAS_SERVER),)
 endif
 ifneq ($(HAS_WEBAPP),)
 	cd webapp && $(NPM) run test;
+endif
+
+## Runs the store integration tests against a REAL Postgres and MySQL. Skips a
+## driver whose DSN env var is unset, so set both to run the full matrix:
+##   CLOCKWORK_TEST_POSTGRES_DSN  postgres://user:pass@host:5432/db?sslmode=disable
+##   CLOCKWORK_TEST_MYSQL_DSN     user:pass@tcp(host:3306)/db?parseTime=true
+## See docs/TESTING.md for a docker quickstart.
+.PHONY: test-integration
+test-integration:
+ifneq ($(HAS_SERVER),)
+	$(GO) test -tags=integration $(GO_TEST_FLAGS) -count=1 ./server/store/...
 endif
 
 ## Creates a coverage report for the server code.

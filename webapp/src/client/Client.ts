@@ -6,6 +6,10 @@ import manifest from 'manifest';
 // TimeEntry mirrors server/store.TimeEntry. All time fields are UTC unix
 // MILLISECONDS; a value of 0 means "unset" (end_at: 0 ⇒ running,
 // break_started_at: 0 ⇒ not on break).
+// EntryStatus mirrors server store.TimeEntry.Status. "locked" is DERIVED
+// server-side as (status !== 'open'); keep reading `locked` for the lock banner.
+export type EntryStatus = 'open' | 'submitted' | 'approved';
+
 export interface TimeEntry {
     id: string;
     user_id: string;
@@ -15,6 +19,7 @@ export interface TimeEntry {
     break_started_at: number;
     project: string;
     description: string;
+    status: EntryStatus;
     locked: boolean;
     created_at: number;
     updated_at: number;
@@ -36,19 +41,6 @@ export interface UpdateEntryBody {
     break_seconds?: number;
     project?: string;
     description?: string;
-}
-
-// One day of the /reports/summary response.
-export interface SummaryDay {
-    date: string;
-    net_seconds: number;
-    break_seconds: number;
-    entries: TimeEntry[];
-}
-
-export interface Summary {
-    total_net_seconds: number;
-    days: SummaryDay[];
 }
 
 // csrfToken reads Mattermost's MMCSRF cookie. Cookie-authenticated mutating
@@ -145,16 +137,47 @@ class Client {
         return this.request('DELETE', `/entries/${encodeURIComponent(id)}`);
     }
 
-    // --- reports ---
-
-    summary(from: number, to: number): Promise<Summary> {
-        return this.request('GET', `/reports/summary?from=${from}&to=${to}`);
+    // exportUrl returns the href for the current user's own CSV export (download
+    // via the browser so the session cookie authenticates the request).
+    exportUrl(from: number, to: number): string {
+        return `${this.baseUrl}/reports/export?from=${from}&to=${to}`;
     }
 
     // --- autocomplete ---
 
     suggestions(): Promise<{projects: string[]; notes: string[]}> {
         return this.request('GET', '/suggestions');
+    }
+
+    // --- config ---
+
+    // config reports server feature flags to the webapp. Requires auth (any
+    // logged-in user). approval_enabled gates all workflow UI.
+    config(): Promise<{approval_enabled: boolean}> {
+        return this.request('GET', '/config');
+    }
+
+    // --- approval workflow (only active when approval_enabled; server returns
+    // 404 otherwise). from/to are unix MILLISECONDS, matching listEntries. ---
+
+    submitTimesheet(from: number, to: number): Promise<{updated: number}> {
+        return this.request('POST', '/timesheet/submit', {from, to});
+    }
+
+    withdrawTimesheet(from: number, to: number): Promise<{updated: number}> {
+        return this.request('POST', '/timesheet/withdraw', {from, to});
+    }
+
+    adminApprove(userId: string, from: number, to: number): Promise<{updated: number}> {
+        return this.request('POST', '/admin/approve', {user_id: userId, from, to});
+    }
+
+    adminReject(userId: string, from: number, to: number): Promise<{updated: number}> {
+        return this.request('POST', '/admin/reject', {user_id: userId, from, to});
+    }
+
+    adminReopen(userId: string, from: number, to: number): Promise<{updated: number}> {
+        return this.request('POST', '/admin/reopen', {user_id: userId, from, to});
     }
 
     // --- admin (system admins only; server enforces) ---

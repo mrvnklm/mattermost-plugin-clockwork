@@ -12,43 +12,37 @@ import {useStableId} from 'utils/useStableId';
 import AdminProjectSummary from 'components/admin/AdminProjectSummary';
 import type {AdminRow} from 'components/admin/AdminTable';
 import AdminTable from 'components/admin/AdminTable';
-import AdminUserSummary from 'components/admin/AdminUserSummary';
 
 ensureStyles();
 
 type StatusFilter = 'all' | EntryStatus;
 
-// AdminConsole renders the full-page "Team report" mounted at the team route
-// /<team>/<plugin-id>/admin (registered via registerNeedsTeamRoute, NOT a System
-// Console custom setting). The server re-checks admin permission on every
-// request; this component receives no Mattermost-supplied props.
-export default function AdminConsole(): JSX.Element {
-    // Defaults computed in the initializer so module-load time never matters:
-    // from = first day of the current month, to = today.
+// PersonalReport is the full-page time report scoped to the current user. It is
+// the default view of the Clockwork product and is available to every user — it
+// reuses the same presentation as the admin team report (totals, per-project
+// breakdown, entries table) but without any cross-user or approval-admin
+// controls. All data comes from the caller's own endpoints (/entries,
+// /reports/export, /timesheet/submit|withdraw).
+export default function PersonalReport(): JSX.Element {
+    // Default range: first day of the current month → today.
     const [from, setFrom] = useState(() => {
         const d = new Date();
         return dateInputValue(new Date(d.getFullYear(), d.getMonth(), 1));
     });
     const [to, setTo] = useState(() => dateInputValue(new Date()));
 
-    // selectedUserId is the server-side filter key. Empty = all users. Selecting
-    // a user narrows BOTH the loaded entries and the CSV export to that user.
-    const [selectedUserId, setSelectedUserId] = useState('');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-    const [showEntries, setShowEntries] = useState(false);
     const [rows, setRows] = useState<AdminRow[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [actionBusy, setActionBusy] = useState(false);
     const [approvalEnabled, setApprovalEnabled] = useState(false);
 
-    const ids = useStableId('cw-admin');
+    const ids = useStableId('cw-me');
     const fromId = `${ids}-from`;
     const toId = `${ids}-to`;
     const statusId = `${ids}-status`;
 
-    // Date-input strings → epoch ms covering the full days [from, to], resolved
-    // in the user's Mattermost timezone (consistent with the table/CSV grouping).
     const fromMs = fromDatetimeInput(from + 'T00:00');
     const toMs = fromDatetimeInput(to + 'T23:59') + 59_999;
 
@@ -69,21 +63,15 @@ export default function AdminConsole(): JSX.Element {
         };
     }, []);
 
-    // Reload whenever the range or the selected user changes (and on mount). The
-    // selected user is passed to the SERVER so we never load all users' entries
-    // into the browser when narrowing to one person.
     const reload = useCallback(async (signal?: {cancelled: boolean}) => {
         setLoading(true);
         setError('');
         try {
-            const {entries, usernames} = await Client.adminEntries(fromMs, toMs, selectedUserId);
+            const {entries} = await Client.listEntries(fromMs, toMs);
             if (signal?.cancelled) {
                 return;
             }
-            setRows(entries.map((e: TimeEntry) => ({
-                entry: e,
-                username: usernames[e.user_id] ?? e.user_id,
-            })));
+            setRows(entries.map((e: TimeEntry) => ({entry: e, username: ''})));
         } catch (e) {
             if (!signal?.cancelled) {
                 setError(e instanceof Error ? e.message : String(e));
@@ -94,9 +82,9 @@ export default function AdminConsole(): JSX.Element {
             }
         }
 
-        // fromMs/toMs derive from from/to; selectedUserId is the server filter.
+        // fromMs/toMs derive from from/to.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [from, to, selectedUserId]);
+    }, [from, to]);
 
     useEffect(() => {
         const signal = {cancelled: false};
@@ -106,11 +94,8 @@ export default function AdminConsole(): JSX.Element {
         };
     }, [reload]);
 
-    // One clock read per render keeps still-running entries consistent across
-    // the totals and the table.
     const now = Date.now();
 
-    // Client-side status filter (the server already scoped to the user).
     const filtered = useMemo(() => {
         if (statusFilter === 'all') {
             return rows;
@@ -122,36 +107,19 @@ export default function AdminConsole(): JSX.Element {
         () => decimalHours(filtered.reduce((sum, r) => sum + netSeconds(r.entry, now), 0)),
         [filtered, now],
     );
-    const peopleCount = useMemo(
-        () => new Set(filtered.map((r) => r.entry.user_id)).size,
-        [filtered],
-    );
     const entriesCount = filtered.length;
 
-    // The name of the selected user (for the action bar / clear chip).
-    const selectedUsername = useMemo(() => {
-        if (!selectedUserId) {
-            return '';
-        }
-        const hit = rows.find((r) => r.entry.user_id === selectedUserId);
-        return hit ? hit.username : selectedUserId;
-    }, [rows, selectedUserId]);
-
-    const userSelected = selectedUserId !== '';
-
-    // The detailed entries default to hidden to reduce clutter, but always
-    // expand when a user is selected or when the admin explicitly toggles them.
-    const entriesExpanded = userSelected || showEntries;
+    // Counts that drive which workflow action is offered for the selected range.
+    const openCount = useMemo(() => rows.filter((r) => r.entry.status === 'open' && r.entry.end_at !== 0).length, [rows]);
+    const submittedCount = useMemo(() => rows.filter((r) => r.entry.status === 'submitted').length, [rows]);
 
     const onExport = () => {
-        const url = Client.adminExportUrl(fromMs, toMs, selectedUserId);
-        const win = window.open(url, '_blank', 'noopener');
+        const win = window.open(Client.exportUrl(fromMs, toMs), '_blank', 'noopener');
         if (!win) {
             setError(t('exportFailed'));
         }
     };
 
-    // Approval actions operate on the selected user across the current range.
     const runAction = async (fn: () => Promise<{updated: number}>) => {
         setActionBusy(true);
         setError('');
@@ -164,15 +132,14 @@ export default function AdminConsole(): JSX.Element {
             setActionBusy(false);
         }
     };
-    const onApprove = () => runAction(() => Client.adminApprove(selectedUserId, fromMs, toMs));
-    const onReject = () => runAction(() => Client.adminReject(selectedUserId, fromMs, toMs));
-    const onReopen = () => runAction(() => Client.adminReopen(selectedUserId, fromMs, toMs));
+    const onSubmit = () => runAction(() => Client.submitTimesheet(fromMs, toMs));
+    const onWithdraw = () => runAction(() => Client.withdrawTimesheet(fromMs, toMs));
 
     return (
         <div className='tt-admin'>
             <div className='tt-admin__inner'>
-                <h2 className='tt-admin__title'>{t('adminTitle')}</h2>
-                <p className='tt-admin__sub'>{t('adminDesc')}</p>
+                <h2 className='tt-admin__title'>{t('myReportTitle')}</h2>
+                <p className='tt-admin__sub'>{t('myReportDesc')}</p>
 
                 <div className='tt-admin__bar'>
                     <div className='tt-admin__field'>
@@ -212,6 +179,24 @@ export default function AdminConsole(): JSX.Element {
                         </div>
                     )}
                     <div className='tt-admin__spacer'/>
+                    {approvalEnabled && openCount > 0 && (
+                        <button
+                            className='tt-btn-sm'
+                            disabled={actionBusy}
+                            onClick={onSubmit}
+                        >
+                            {t('submitRange')}
+                        </button>
+                    )}
+                    {approvalEnabled && submittedCount > 0 && (
+                        <button
+                            className='tt-btn-sm'
+                            disabled={actionBusy}
+                            onClick={onWithdraw}
+                        >
+                            {t('withdraw')}
+                        </button>
+                    )}
                     <button
                         className='btn btn-primary'
                         onClick={onExport}
@@ -220,59 +205,10 @@ export default function AdminConsole(): JSX.Element {
                     </button>
                 </div>
 
-                {userSelected && (
-                    <div className='tt-admin__bar'>
-                        <div className='tt-admin__field'>
-                            <span className='tt-fieldlabel'>{t('user')}</span>
-                            <div className='tt-actbtns'>
-                                <span className='tt-badge tt-badge--submitted'>{selectedUsername}</span>
-                                <button
-                                    className='tt-btn-sm'
-                                    onClick={() => setSelectedUserId('')}
-                                >
-                                    {t('allUsers')}
-                                </button>
-                            </div>
-                        </div>
-                        {approvalEnabled && (
-                            <>
-                                <div className='tt-admin__spacer'/>
-                                <div className='tt-actbtns'>
-                                    <button
-                                        className='tt-btn-sm'
-                                        disabled={actionBusy}
-                                        onClick={onApprove}
-                                    >
-                                        {t('approve')}
-                                    </button>
-                                    <button
-                                        className='tt-btn-sm'
-                                        disabled={actionBusy}
-                                        onClick={onReject}
-                                    >
-                                        {t('reject')}
-                                    </button>
-                                    <button
-                                        className='tt-btn-sm'
-                                        disabled={actionBusy}
-                                        onClick={onReopen}
-                                    >
-                                        {t('reopen')}
-                                    </button>
-                                </div>
-                            </>
-                        )}
-                    </div>
-                )}
-
                 <div className='tt-admin__totals'>
                     <div className='tt-admin__stat'>
                         <b>{totalHours}</b>
                         <span>{t('totalHours')}</span>
-                    </div>
-                    <div className='tt-admin__stat'>
-                        <b>{peopleCount}</b>
-                        <span>{t('people')}</span>
                     </div>
                     <div className='tt-admin__stat'>
                         <b>{entriesCount}</b>
@@ -286,34 +222,17 @@ export default function AdminConsole(): JSX.Element {
                     <div className='tt-admin__empty'>{t('loading')}</div>
                 ) : (
                     <>
-                        <AdminUserSummary
-                            rows={filtered}
-                            now={now}
-                            onSelectUser={setSelectedUserId}
-                        />
-
                         <h3 className='tt-admin__h3'>{t('byProject')}</h3>
                         <AdminProjectSummary
                             rows={filtered}
                             now={now}
                         />
-
-                        <div className='tt-admin__bar'>
-                            <button
-                                className='tt-link'
-                                disabled={userSelected}
-                                onClick={() => setShowEntries((v) => !v)}
-                            >
-                                {entriesExpanded ? t('hideEntries') : t('showEntries')}
-                            </button>
-                        </div>
-                        {entriesExpanded ? (
-                            <AdminTable
-                                rows={filtered}
-                                now={now}
-                                approvalEnabled={approvalEnabled}
-                            />
-                        ) : null}
+                        <AdminTable
+                            rows={filtered}
+                            now={now}
+                            approvalEnabled={approvalEnabled}
+                            showUser={false}
+                        />
                     </>
                 )}
             </div>

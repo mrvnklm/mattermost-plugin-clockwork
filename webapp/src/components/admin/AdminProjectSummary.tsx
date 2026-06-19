@@ -10,31 +10,24 @@ import type {AdminRow} from 'components/admin/AdminTable';
 type Props = {
     rows: AdminRow[];
     now: number;
-
-    // onSelectUser receives the user's id (server-side filter key), not the
-    // display name — selecting a user narrows BOTH the on-screen report and the
-    // CSV export to exactly that user.
-    onSelectUser?: (userId: string) => void;
 };
 
-type UserStat = {userId: string; username: string; entries: number; net: number};
+type ProjectStat = {project: string; entries: number; net: number};
 
-// AdminUserSummary is the primary "Team report" view: one row per distinct
-// user with their entry count and total net hours, sorted by hours desc. The
-// user name is a button that drives the parent's server-side user filter.
-export default function AdminUserSummary({rows, now, onSelectUser}: Props): JSX.Element {
-    // Aggregate per user id, then sort by net seconds desc. Sorting derived
-    // data avoids mutating the caller's array.
+// AdminProjectSummary aggregates net hours per project across the visible rows
+// (a common reporting need: hours per client/project). Entries without a
+// project are grouped under the localized "No project" bucket.
+export default function AdminProjectSummary({rows, now}: Props): JSX.Element {
     const stats = useMemo(() => {
-        const byUser = new Map<string, UserStat>();
+        const byProject = new Map<string, ProjectStat>();
         for (const r of rows) {
-            const id = r.entry.user_id;
-            const stat = byUser.get(id) ?? {userId: id, username: r.username, entries: 0, net: 0};
+            const project = r.entry.project || t('noProject');
+            const stat = byProject.get(project) ?? {project, entries: 0, net: 0};
             stat.entries += 1;
             stat.net += netSeconds(r.entry, now);
-            byUser.set(id, stat);
+            byProject.set(project, stat);
         }
-        return [...byUser.values()].sort((a, b) => b.net - a.net);
+        return [...byProject.values()].sort((a, b) => b.net - a.net);
     }, [rows, now]);
 
     const totalNet = useMemo(
@@ -54,24 +47,15 @@ export default function AdminUserSummary({rows, now, onSelectUser}: Props): JSX.
         <table className='tt-table'>
             <thead>
                 <tr>
-                    <th>{t('user')}</th>
+                    <th>{t('project_')}</th>
                     <th>{t('entriesCount')}</th>
                     <th className='tt-num'>{t('hours')}</th>
                 </tr>
             </thead>
             <tbody>
                 {stats.map((s) => (
-                    <tr key={s.userId}>
-                        <td>
-                            {onSelectUser ? (
-                                <button
-                                    className='tt-link'
-                                    onClick={() => onSelectUser(s.userId)}
-                                >
-                                    {s.username}
-                                </button>
-                            ) : s.username}
-                        </td>
+                    <tr key={s.project}>
+                        <td>{s.project}</td>
                         <td>{s.entries}</td>
                         <td className='tt-num'>{decimalHours(s.net)}</td>
                     </tr>

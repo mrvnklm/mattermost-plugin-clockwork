@@ -1,5 +1,8 @@
 # Builds the plugin bundle (make dist) on every pushed v* tag and
 # publishes a GitHub Release with the resulting dist/*.tar.gz attached.
+#
+# Packaging is gated behind a green lint/test run (the `gate` job): a tag that
+# does not build cleanly never produces a published release asset.
 name: release
 on:
   push:
@@ -10,7 +13,40 @@ permissions:
   contents: write
 
 jobs:
+  # Fast lint/test gate. The release job depends on this, so a red test run on a
+  # tagged commit blocks publishing. Kept inline (rather than calling ci.yml) so
+  # it stays quick and self-contained — the heavier shared CI still runs via
+  # ci.yml on the same tag push.
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Vet server
+        run: go vet ./server/...
+
+      - name: Test server
+        run: go test ./server/...
+
+      - name: Install webapp deps
+        run: cd webapp && npm ci
+
+      - name: Test webapp
+        run: cd webapp && npm test
+
   release:
+    needs: gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -103,6 +103,18 @@ export const PlusIcon = ({size = 14}: Props): JSX.Element => (
     </svg>
 );
 
+export const ChevronLeftIcon = ({size = 16}: Props): JSX.Element => (
+    <svg {...base(size)}>
+        <polyline points='15 18 9 12 15 6'/>
+    </svg>
+);
+
+export const ChevronRightIcon = ({size = 16}: Props): JSX.Element => (
+    <svg {...base(size)}>
+        <polyline points='9 18 15 12 9 6'/>
+    </svg>
+);
+
 export const LockIcon = ({size = 13}: Props): JSX.Element => (
     <svg {...base(size)}>
         <rect

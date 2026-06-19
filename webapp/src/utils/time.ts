@@ -141,6 +141,12 @@ export function localClock(ms: number): string {
     return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// dateInputValue formats a Date as the "YYYY-MM-DD" string an <input type="date">
+// expects, using the local calendar day. Used for the report range pickers.
+export function dateInputValue(d: Date): string {
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 // toDatetimeInput converts unix millis to an <input type="datetime-local">
 // value ("YYYY-MM-DDTHH:mm") in the active timezone, so the field shows the same
 // wall-clock time the rest of the panel displays.

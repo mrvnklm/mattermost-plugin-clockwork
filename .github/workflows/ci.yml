@@ -14,6 +14,62 @@ permissions:
   id-token: write
 
 jobs:
+  # Mattermost's shared plugin CI: lint, build, unit tests, artifact upload.
+  #
+  # Pinned to a commit SHA rather than @main so a force-push or compromise of the
+  # upstream branch cannot silently change what runs here. The actions-workflows
+  # repo publishes no release tags, so a SHA is the only immutable ref available.
+  #
+  # NEEDS HUMAN REVIEW: 86a78bd (commit dated 2026-06-02) was the tip of
+  # mattermost/actions-workflows main when pinned. Re-pin to a newer reviewed
+  # SHA periodically.
   plugin-ci:
-    uses: mattermost/actions-workflows/.github/workflows/plugin-ci.yml@main
+    uses: mattermost/actions-workflows/.github/workflows/plugin-ci.yml@86a78bd5bf6e009254bd0e23e316601d9d0db472
     secrets: inherit
+
+  # Store integration tests against REAL Postgres and MySQL service containers.
+  # These cover what the unit suite cannot: migrate() idempotency, the additive
+  # status-column ADD, the single-running-entry invariant under contention, and
+  # the SetStatusRange transition matrix — on both supported drivers.
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: clockwork
+          POSTGRES_PASSWORD: clockwork
+          POSTGRES_DB: clockwork_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U clockwork -d clockwork_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: clockwork_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -uroot -proot --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      CLOCKWORK_TEST_POSTGRES_DSN: postgres://clockwork:clockwork@localhost:5432/clockwork_test?sslmode=disable
+      CLOCKWORK_TEST_MYSQL_DSN: root:root@tcp(localhost:3306)/clockwork_test?parseTime=true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run store integration tests
+        run: go test -tags=integration -race -count=1 ./server/store/...

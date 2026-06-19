@@ -20,6 +20,14 @@ import (
 // explicit from/to range is supplied.
 const defaultWindow = 7 * 24 * time.Hour
 
+// userClient is the slice of the Mattermost user API the HTTP handlers depend
+// on. It is satisfied by *pluginapi.UserService and lets handler tests inject a
+// mock for username resolution and admin permission checks.
+type userClient interface {
+	Get(userID string) (*model.User, error)
+	HasPermissionTo(userID string, permission *model.Permission) bool
+}
+
 // initRouter initializes the HTTP router for the plugin.
 func (p *Plugin) initRouter() *mux.Router {
 	router := mux.NewRouter()
@@ -28,6 +36,9 @@ func (p *Plugin) initRouter() *mux.Router {
 	router.Use(p.MattermostAuthorizationRequired)
 
 	api := router.PathPrefix("/api/v1").Subrouter()
+
+	// Plugin configuration (any logged-in user).
+	api.HandleFunc("/config", p.handleConfig).Methods(http.MethodGet)
 
 	// Live timer.
 	api.HandleFunc("/timer/current", p.handleTimerCurrent).Methods(http.MethodGet)
@@ -49,9 +60,19 @@ func (p *Plugin) initRouter() *mux.Router {
 	// Autocomplete suggestions (current user).
 	api.HandleFunc("/suggestions", p.handleSuggestions).Methods(http.MethodGet)
 
+	// Approval workflow (current user). Each handler returns 404 when the
+	// approval workflow is disabled in the plugin configuration.
+	api.HandleFunc("/timesheet/submit", p.handleTimesheetSubmit).Methods(http.MethodPost)
+	api.HandleFunc("/timesheet/withdraw", p.handleTimesheetWithdraw).Methods(http.MethodPost)
+
 	// Admin.
 	api.HandleFunc("/admin/entries", p.handleAdminEntries).Methods(http.MethodGet)
 	api.HandleFunc("/admin/export", p.handleAdminExport).Methods(http.MethodGet)
+
+	// Approval workflow (admin). Also gated on EnableApproval (404 when off).
+	api.HandleFunc("/admin/approve", p.handleAdminApprove).Methods(http.MethodPost)
+	api.HandleFunc("/admin/reject", p.handleAdminReject).Methods(http.MethodPost)
+	api.HandleFunc("/admin/reopen", p.handleAdminReopen).Methods(http.MethodPost)
 
 	return router
 }
@@ -121,7 +142,11 @@ func (p *Plugin) writeStoreError(w http.ResponseWriter, err error) bool {
 // malformed integer.
 func (p *Plugin) parseRange(w http.ResponseWriter, r *http.Request) (from, to int64, ok bool) {
 	now := model.GetMillis()
-	from = now - defaultWindow.Milliseconds()
+	window := defaultWindow
+	if d := p.getConfiguration().DefaultReportDays; d > 0 {
+		window = time.Duration(d) * 24 * time.Hour
+	}
+	from = now - window.Milliseconds()
 	to = now
 
 	q := r.URL.Query()
@@ -151,7 +176,7 @@ func (p *Plugin) parseRange(w http.ResponseWriter, r *http.Request) (from, to in
 // userLocation resolves a user's preferred Mattermost timezone to a
 // *time.Location, falling back to UTC.
 func (p *Plugin) userLocation(userID string) *time.Location {
-	user, err := p.client.User.Get(userID)
+	user, err := p.users.Get(userID)
 	if err != nil {
 		return time.UTC
 	}
@@ -256,6 +281,7 @@ func (p *Plugin) handleCreateEntry(w http.ResponseWriter, r *http.Request) {
 	entry.UserID = userID
 	entry.ID = ""
 	entry.Locked = false
+	entry.Status = store.StatusOpen
 	entry.CreatedAt = 0
 	entry.UpdatedAt = 0
 
@@ -453,10 +479,150 @@ func (p *Plugin) handleSuggestions(w http.ResponseWriter, r *http.Request) {
 	p.writeJSON(w, http.StatusOK, map[string]interface{}{"projects": projects, "notes": notes})
 }
 
+// --- Config handler ---
+
+// handleConfig returns the subset of plugin configuration the webapp needs to
+// decide whether to show the approval-workflow UI. Any logged-in user may read
+// it (the auth middleware already enforces a session).
+func (p *Plugin) handleConfig(w http.ResponseWriter, r *http.Request) {
+	cfg := p.getConfiguration()
+	p.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"approval_enabled": cfg.EnableApproval,
+	})
+}
+
+// --- Approval workflow handlers ---
+
+// decodeRange decodes a {"from":<ms>,"to":<ms>} JSON body and validates the
+// range. It writes a 400 and returns ok=false on a malformed body or range.
+func (p *Plugin) decodeRange(w http.ResponseWriter, r *http.Request) (from, to int64, ok bool) {
+	var body struct {
+		From int64 `json:"from"`
+		To   int64 `json:"to"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		p.writeError(w, http.StatusBadRequest, "invalid request body")
+		return 0, 0, false
+	}
+	if body.From <= 0 || body.To <= 0 {
+		p.writeError(w, http.StatusBadRequest, "'from' and 'to' are required")
+		return 0, 0, false
+	}
+	if body.To < body.From {
+		p.writeError(w, http.StatusBadRequest, "'to' must not be before 'from'")
+		return 0, 0, false
+	}
+	return body.From, body.To, true
+}
+
+// approvalEnabled reports whether the approval workflow is on. When off it
+// writes a 404 so the workflow endpoints are indistinguishable from unrouted
+// paths, and returns false.
+func (p *Plugin) approvalEnabled(w http.ResponseWriter) bool {
+	if !p.getConfiguration().EnableApproval {
+		p.writeError(w, http.StatusNotFound, "not found")
+		return false
+	}
+	return true
+}
+
+// transition runs a SetStatusRange for the given user/range/status pair and
+// writes the {"updated":<n>} response (or maps the store error).
+func (p *Plugin) transition(w http.ResponseWriter, userID string, from, to int64, fromStatus, toStatus string) {
+	n, err := p.store.SetStatusRange(userID, from, to, fromStatus, toStatus)
+	if p.writeStoreError(w, err) {
+		return
+	}
+	p.writeJSON(w, http.StatusOK, map[string]interface{}{"updated": n})
+}
+
+func (p *Plugin) handleTimesheetSubmit(w http.ResponseWriter, r *http.Request) {
+	if !p.approvalEnabled(w) {
+		return
+	}
+	userID := r.Header.Get("Mattermost-User-ID")
+	from, to, ok := p.decodeRange(w, r)
+	if !ok {
+		return
+	}
+	p.transition(w, userID, from, to, store.StatusOpen, store.StatusSubmitted)
+}
+
+func (p *Plugin) handleTimesheetWithdraw(w http.ResponseWriter, r *http.Request) {
+	if !p.approvalEnabled(w) {
+		return
+	}
+	userID := r.Header.Get("Mattermost-User-ID")
+	from, to, ok := p.decodeRange(w, r)
+	if !ok {
+		return
+	}
+	p.transition(w, userID, from, to, store.StatusSubmitted, store.StatusOpen)
+}
+
+// decodeAdminRange decodes an admin workflow body {"user_id","from","to"} after
+// verifying admin permission and that the workflow is enabled. Returns ok=false
+// (response already written) on any failure.
+func (p *Plugin) decodeAdminRange(w http.ResponseWriter, r *http.Request) (targetUser string, from, to int64, ok bool) {
+	if !p.approvalEnabled(w) {
+		return "", 0, 0, false
+	}
+	caller := r.Header.Get("Mattermost-User-ID")
+	if !p.requireAdmin(w, caller) {
+		return "", 0, 0, false
+	}
+	var body struct {
+		UserID string `json:"user_id"`
+		From   int64  `json:"from"`
+		To     int64  `json:"to"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		p.writeError(w, http.StatusBadRequest, "invalid request body")
+		return "", 0, 0, false
+	}
+	if body.UserID == "" {
+		p.writeError(w, http.StatusBadRequest, "user_id is required")
+		return "", 0, 0, false
+	}
+	if body.From <= 0 || body.To <= 0 {
+		p.writeError(w, http.StatusBadRequest, "'from' and 'to' are required")
+		return "", 0, 0, false
+	}
+	if body.To < body.From {
+		p.writeError(w, http.StatusBadRequest, "'to' must not be before 'from'")
+		return "", 0, 0, false
+	}
+	return body.UserID, body.From, body.To, true
+}
+
+func (p *Plugin) handleAdminApprove(w http.ResponseWriter, r *http.Request) {
+	targetUser, from, to, ok := p.decodeAdminRange(w, r)
+	if !ok {
+		return
+	}
+	p.transition(w, targetUser, from, to, store.StatusSubmitted, store.StatusApproved)
+}
+
+func (p *Plugin) handleAdminReject(w http.ResponseWriter, r *http.Request) {
+	targetUser, from, to, ok := p.decodeAdminRange(w, r)
+	if !ok {
+		return
+	}
+	p.transition(w, targetUser, from, to, store.StatusSubmitted, store.StatusOpen)
+}
+
+func (p *Plugin) handleAdminReopen(w http.ResponseWriter, r *http.Request) {
+	targetUser, from, to, ok := p.decodeAdminRange(w, r)
+	if !ok {
+		return
+	}
+	p.transition(w, targetUser, from, to, store.StatusApproved, store.StatusOpen)
+}
+
 // --- Admin handlers ---
 
 func (p *Plugin) requireAdmin(w http.ResponseWriter, userID string) bool {
-	if !p.client.User.HasPermissionTo(userID, model.PermissionManageSystem) {
+	if !p.users.HasPermissionTo(userID, model.PermissionManageSystem) {
 		p.writeError(w, http.StatusForbidden, "forbidden")
 		return false
 	}
@@ -495,7 +661,7 @@ func (p *Plugin) handleAdminEntries(w http.ResponseWriter, r *http.Request) {
 			usernames[e.UserID] = e.UserID
 			continue
 		}
-		if u, uerr := p.client.User.Get(e.UserID); uerr == nil {
+		if u, uerr := p.users.Get(e.UserID); uerr == nil {
 			usernames[e.UserID] = u.Username
 		} else {
 			usernames[e.UserID] = e.UserID
@@ -527,7 +693,7 @@ func (p *Plugin) handleAdminExport(w http.ResponseWriter, r *http.Request) {
 		if u, found := userCache[uid]; found {
 			return u
 		}
-		u, uerr := p.client.User.Get(uid)
+		u, uerr := p.users.Get(uid)
 		if uerr != nil {
 			u = nil
 		}

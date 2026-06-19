@@ -20,7 +20,7 @@ type SQLStore struct {
 
 // columns is the canonical, ordered list of timetracking_entries columns used
 // by SELECT/INSERT statements so scanning stays in sync.
-const columns = "id, user_id, start_at, end_at, break_seconds, break_started_at, project, description, locked, created_at, updated_at"
+const columns = "id, user_id, start_at, end_at, break_seconds, break_started_at, project, description, status, created_at, updated_at"
 
 // driverMySQL is the SQL driver name a Mattermost server reports for MySQL. The
 // model package only exports the Postgres constant (model.DatabaseDriverPostgres),
@@ -98,6 +98,7 @@ func scanEntry(row interface{ Scan(...interface{}) error }) (*TimeEntry, error) 
 		breakStart sql.NullInt64
 		project    sql.NullString
 		desc       sql.NullString
+		status     sql.NullString
 	)
 
 	if err := row.Scan(
@@ -109,7 +110,7 @@ func scanEntry(row interface{ Scan(...interface{}) error }) (*TimeEntry, error) 
 		&breakStart,
 		&project,
 		&desc,
-		&e.Locked,
+		&status,
 		&e.CreatedAt,
 		&e.UpdatedAt,
 	); err != nil {
@@ -124,6 +125,9 @@ func scanEntry(row interface{ Scan(...interface{}) error }) (*TimeEntry, error) 
 	}
 	e.Project = project.String
 	e.Description = desc.String
+	e.Status = status.String
+	// Derive the Locked convenience flag (and normalize empty status to "open").
+	e.syncLocked()
 
 	return &e, nil
 }
@@ -132,6 +136,10 @@ func scanEntry(row interface{ Scan(...interface{}) error }) (*TimeEntry, error) 
 func (s *SQLStore) insertEntry(ex interface {
 	Exec(query string, args ...interface{}) (sql.Result, error)
 }, e *TimeEntry) error {
+	status := e.Status
+	if status == "" {
+		status = StatusOpen
+	}
 	query := s.ph("INSERT INTO timetracking_entries (" + columns + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 	_, err := ex.Exec(query,
 		e.ID,
@@ -142,7 +150,7 @@ func (s *SQLStore) insertEntry(ex interface {
 		nullInt(e.BreakStartedAt),
 		e.Project,
 		e.Description,
-		e.Locked,
+		status,
 		e.CreatedAt,
 		e.UpdatedAt,
 	)
@@ -181,9 +189,11 @@ func (s *SQLStore) StartTimer(userID, project, description string, now int64) (*
 		StartAt:     now,
 		Project:     project,
 		Description: description,
+		Status:      StatusOpen,
 		CreatedAt:   created,
 		UpdatedAt:   created,
 	}
+	e.syncLocked()
 
 	if err := s.insertEntry(tx, e); err != nil {
 		// A unique-key violation on the open-row index means a concurrent start
@@ -324,21 +334,44 @@ func (s *SQLStore) Get(id string) (*TimeEntry, error) {
 	return e, nil
 }
 
+// maxListRows is a hard upper bound on rows returned by List/ListAll. It caps
+// memory for a wide admin range (all users) so a single request can never load
+// an unbounded result set. When a query hits the cap the admin path logs a
+// warning so the truncation is never silent.
+const maxListRows = 10000
+
+// listLimit is the LIMIT clause appended to list queries. It is a trusted
+// integer constant (never user input), so it is safe to inline rather than
+// pass as a placeholder.
+var listLimit = fmt.Sprintf(" LIMIT %d", maxListRows)
+
 // List returns the user's entries whose StartAt is in [from, to), newest first.
 func (s *SQLStore) List(userID string, from, to int64) ([]*TimeEntry, error) {
-	query := s.ph("SELECT " + columns + " FROM timetracking_entries WHERE user_id = ? AND start_at >= ? AND start_at < ? ORDER BY start_at DESC")
+	query := s.ph("SELECT " + columns + " FROM timetracking_entries WHERE user_id = ? AND start_at >= ? AND start_at < ? ORDER BY start_at DESC" + listLimit)
 	return s.queryEntries(query, userID, from, to)
 }
 
 // ListAll returns entries across users in [from, to), newest first. If userID is
-// non-empty it filters to that user.
+// non-empty it filters to that user. Capped at maxListRows; a hit is logged.
 func (s *SQLStore) ListAll(userID string, from, to int64) ([]*TimeEntry, error) {
+	var (
+		entries []*TimeEntry
+		err     error
+	)
 	if userID != "" {
-		query := s.ph("SELECT " + columns + " FROM timetracking_entries WHERE user_id = ? AND start_at >= ? AND start_at < ? ORDER BY start_at DESC")
-		return s.queryEntries(query, userID, from, to)
+		query := s.ph("SELECT " + columns + " FROM timetracking_entries WHERE user_id = ? AND start_at >= ? AND start_at < ? ORDER BY start_at DESC" + listLimit)
+		entries, err = s.queryEntries(query, userID, from, to)
+	} else {
+		query := s.ph("SELECT " + columns + " FROM timetracking_entries WHERE start_at >= ? AND start_at < ? ORDER BY start_at DESC" + listLimit)
+		entries, err = s.queryEntries(query, from, to)
 	}
-	query := s.ph("SELECT " + columns + " FROM timetracking_entries WHERE start_at >= ? AND start_at < ? ORDER BY start_at DESC")
-	return s.queryEntries(query, from, to)
+	// s.client is always set in production (NewSQLStore); the nil guard only
+	// matters for the integration-test constructor, which injects no client.
+	if err == nil && len(entries) == maxListRows && s.client != nil {
+		s.client.Log.Warn("Admin entry list hit the row cap; results truncated",
+			"limit", maxListRows, "user_id", userID, "from", from, "to", to)
+	}
+	return entries, err
 }
 
 // queryEntries runs a SELECT returning multiple rows and scans them all.
@@ -408,15 +441,15 @@ func (s *SQLStore) Update(e *TimeEntry) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	var locked bool
-	row := tx.QueryRow(s.ph("SELECT locked FROM timetracking_entries WHERE id = ? AND user_id = ? FOR UPDATE"), e.ID, e.UserID)
-	switch scanErr := row.Scan(&locked); {
+	var status string
+	row := tx.QueryRow(s.ph("SELECT status FROM timetracking_entries WHERE id = ? AND user_id = ? FOR UPDATE"), e.ID, e.UserID)
+	switch scanErr := row.Scan(&status); {
 	case errors.Is(scanErr, sql.ErrNoRows):
 		return ErrNotFound
 	case scanErr != nil:
 		return errors.Wrap(scanErr, "store: lock entry for update")
 	}
-	if locked {
+	if status != StatusOpen {
 		return ErrLocked
 	}
 
@@ -439,24 +472,73 @@ func (s *SQLStore) Update(e *TimeEntry) error {
 	return nil
 }
 
-// Delete removes an owned entry. Returns ErrLocked if locked, ErrNotFound if it
-// does not exist or is not owned by userID.
+// Delete removes an owned entry. The ownership/lock check and the delete happen
+// atomically inside one transaction (row locked with FOR UPDATE) to avoid a
+// TOCTOU window, mirroring Update. Returns ErrLocked if the stored entry is
+// locked, ErrNotFound if it does not exist or is not owned by userID.
 func (s *SQLStore) Delete(userID, id string) error {
-	existing, err := s.Get(id)
+	tx, err := s.db.Begin()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "store: begin Delete tx")
 	}
-	if existing.UserID != userID {
+	defer func() { _ = tx.Rollback() }()
+
+	var status string
+	row := tx.QueryRow(s.ph("SELECT status FROM timetracking_entries WHERE id = ? AND user_id = ? FOR UPDATE"), id, userID)
+	switch scanErr := row.Scan(&status); {
+	case errors.Is(scanErr, sql.ErrNoRows):
 		return ErrNotFound
+	case scanErr != nil:
+		return errors.Wrap(scanErr, "store: lock entry for delete")
 	}
-	if existing.Locked {
+	if status != StatusOpen {
 		return ErrLocked
 	}
 
-	if _, err := s.db.Exec(s.ph("DELETE FROM timetracking_entries WHERE id = ?"), id); err != nil {
+	if _, err := tx.Exec(s.ph("DELETE FROM timetracking_entries WHERE id = ?"), id); err != nil {
 		return errors.Wrap(err, "store: delete entry")
 	}
+	if err := tx.Commit(); err != nil {
+		return errors.Wrap(err, "store: commit Delete tx")
+	}
 	return nil
+}
+
+// SetStatusRange transitions the user's entries whose StartAt is in [from, to)
+// and whose current status equals fromStatus to toStatus, transactionally.
+// Running (open-end) entries are excluded so an in-progress timer is never
+// swept into a submitted/approved batch. Returns the number of rows affected.
+//
+// This is the single primitive behind the whole approval workflow:
+//   - submit:   open      → submitted (user)
+//   - withdraw: submitted → open      (user)
+//   - approve:  submitted → approved  (admin)
+//   - reject:   submitted → open      (admin)
+//   - reopen:   approved  → open      (admin)
+func (s *SQLStore) SetStatusRange(userID string, from, to int64, fromStatus, toStatus string) (int, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, errors.Wrap(err, "store: begin SetStatusRange tx")
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	now := model.GetMillis()
+	query := s.ph(
+		"UPDATE timetracking_entries SET status = ?, updated_at = ? " +
+			"WHERE user_id = ? AND start_at >= ? AND start_at < ? AND status = ? AND end_at IS NOT NULL",
+	)
+	res, err := tx.Exec(query, toStatus, now, userID, from, to, fromStatus)
+	if err != nil {
+		return 0, errors.Wrap(err, "store: set status range")
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return 0, errors.Wrap(err, "store: set status range rows affected")
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, errors.Wrap(err, "store: commit SetStatusRange tx")
+	}
+	return int(affected), nil
 }
 
 // Suggestions returns the user's distinct non-empty project and note values,
