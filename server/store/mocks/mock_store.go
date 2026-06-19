@@ -9,7 +9,7 @@ import (
 
 	gomock "go.uber.org/mock/gomock"
 
-	store "github.com/vsjwl/mm-time-tracking/server/store"
+	store "github.com/mrvnklm/mattermost-plugin-clockwork/server/store"
 )
 
 // MockStore is a mock of the store.Store interface.

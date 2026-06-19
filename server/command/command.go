@@ -8,7 +8,7 @@ import (
 	"github.com/mattermost/mattermost/server/public/pluginapi"
 	"github.com/pkg/errors"
 
-	"github.com/vsjwl/mm-time-tracking/server/store"
+	"github.com/mrvnklm/mattermost-plugin-clockwork/server/store"
 )
 
 // Handler holds the dependencies needed to execute slash commands.

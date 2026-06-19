@@ -16,7 +16,7 @@ webapp) bundled into one artifact.
 make check-style      # Go vet/lint + webapp eslint
 make test             # go test ./server/... + webapp jest
 make test-integration # SQL store/migrations against real Postgres + MySQL (see docs/TESTING.md)
-make dist             # build dist/com.vsjwl.mm-time-tracking-<version>.tar.gz
+make dist             # build dist/com.mrvnklm.clockwork-<version>.tar.gz
 make deploy           # build + install onto a dev server (see README → Deploy)
 ```
 

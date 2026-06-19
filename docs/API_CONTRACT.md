@@ -1,6 +1,6 @@
 # REST API Contract — v1
 
-Base URL: `/plugins/com.vsjwl.mm-time-tracking/api/v1`
+Base URL: `/plugins/com.mrvnklm.clockwork/api/v1`
 
 **Auth**: the Mattermost server injects the `Mattermost-User-ID` header for
 authenticated sessions. The router middleware rejects any request without it

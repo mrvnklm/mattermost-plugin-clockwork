@@ -13,7 +13,7 @@ import (
 	"github.com/mattermost/mattermost/server/public/plugin"
 	"github.com/pkg/errors"
 
-	"github.com/vsjwl/mm-time-tracking/server/store"
+	"github.com/mrvnklm/mattermost-plugin-clockwork/server/store"
 )
 
 // defaultWindow is the lookback used for list/summary/export endpoints when no
@@ -78,7 +78,7 @@ func (p *Plugin) initRouter() *mux.Router {
 }
 
 // ServeHTTP routes incoming plugin HTTP requests through the gorilla mux router.
-// The root URL is <siteUrl>/plugins/com.vsjwl.mm-time-tracking/api/v1/.
+// The root URL is <siteUrl>/plugins/com.mrvnklm.clockwork/api/v1/.
 func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Request) {
 	p.router.ServeHTTP(w, r)
 }

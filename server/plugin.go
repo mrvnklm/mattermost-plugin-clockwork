@@ -10,8 +10,8 @@ import (
 	"github.com/mattermost/mattermost/server/public/pluginapi"
 	"github.com/pkg/errors"
 
-	"github.com/vsjwl/mm-time-tracking/server/command"
-	"github.com/vsjwl/mm-time-tracking/server/store"
+	"github.com/mrvnklm/mattermost-plugin-clockwork/server/command"
+	"github.com/mrvnklm/mattermost-plugin-clockwork/server/store"
 )
 
 // Plugin implements the interface expected by the Mattermost server to communicate between the server and plugin processes.

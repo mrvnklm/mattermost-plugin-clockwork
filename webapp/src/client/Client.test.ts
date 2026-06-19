@@ -7,9 +7,9 @@
 
 import Client from './Client';
 
-// manifest.id is 'com.vsjwl.mm-time-tracking' (see manifest.ts); the base URL
+// manifest.id is 'com.mrvnklm.clockwork' (see manifest.ts); the base URL
 // is /plugins/<id>/api/v1.
-const BASE = '/plugins/com.vsjwl.mm-time-tracking/api/v1';
+const BASE = '/plugins/com.mrvnklm.clockwork/api/v1';
 
 type FetchCall = {url: string; init: RequestInit};
 

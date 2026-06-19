@@ -1,5 +1,5 @@
 {
-    "id": "com.vsjwl.mm-time-tracking",
+    "id": "com.mrvnklm.clockwork",
     "name": "Clockwork",
     "description": "Clockwork — Arbeitszeiterfassung for Mattermost: clock in/out with breaks, weekly timesheets, and CSV export.",
     "homepage_url": "https://github.com/mrvnklm/mattermost-plugin-clockwork",

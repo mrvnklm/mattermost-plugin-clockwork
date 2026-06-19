@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/vsjwl/mm-time-tracking/server/store"
+	"github.com/mrvnklm/mattermost-plugin-clockwork/server/store"
 )
 
 func TestFriendlyError(t *testing.T) {

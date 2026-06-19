@@ -11,8 +11,8 @@ import (
 	"github.com/mattermost/mattermost/server/public/model"
 	"go.uber.org/mock/gomock"
 
-	"github.com/vsjwl/mm-time-tracking/server/store"
-	"github.com/vsjwl/mm-time-tracking/server/store/mocks"
+	"github.com/mrvnklm/mattermost-plugin-clockwork/server/store"
+	"github.com/mrvnklm/mattermost-plugin-clockwork/server/store/mocks"
 )
 
 // fakeUsers is a hand-rolled userClient stub for handler tests. It records

@@ -7,7 +7,7 @@ clock in/out with breaks, a weekly timesheet, manual corrections, and CSV export
 Built compliance-first for German *Arbeitszeiterfassung* (records start, end,
 breaks and net daily hours), with an optional project/description per entry.
 
-- **Plugin id:** `com.vsjwl.mm-time-tracking`
+- **Plugin id:** `com.mrvnklm.clockwork`
 - **Min server version:** 9.0.0 (self-hosted). **PostgreSQL** is the target database — it's Mattermost's standard since v8.0 and the only DB [supported from Mattermost v11](https://docs.mattermost.com/product-overview/deprecated-features.html). MySQL still works (and is covered by the integration suite) for older deployments, but is deprecated upstream; new installs should use PostgreSQL.
 - **License:** Apache-2.0 · German + English UI
 
@@ -31,15 +31,19 @@ breaks and net daily hours), with an optional project/description per entry.
 - **CSV export** for your own records, and for admins across the team (formula-injection safe).
 - Net hours = `end − start − breaks`; days are grouped in each user's Mattermost timezone.
 
-| Timer (RHS) | Team report | Edit entry |
+| Product switcher | Personal report (every user) | Team report (admins) |
 |---|---|---|
-| ![Timer](docs/screenshots/timer.png) | ![Team report](docs/screenshots/team-report.png) | ![Edit entry](docs/screenshots/edit-entry.png) |
+| ![Product switcher](docs/screenshots/product-switcher.png) | ![Personal report](docs/screenshots/personal-report.png) | ![Team report](docs/screenshots/team-report.png) |
+
+| Quick-timer panel (RHS) | Edit / add entry |
+|---|---|
+| ![Timer](docs/screenshots/timer.png) | ![Edit entry](docs/screenshots/edit-entry.png) |
 
 ## Architecture
 
 A single bundle: a **Go server** component (slash command, REST API, SQL persistence
-in the Mattermost database) and a **React/TypeScript webapp** (RHS panel + full-page
-admin report). One table, `timetracking_entries`; a running entry is a row with
+in the Mattermost database) and a **React/TypeScript webapp** (RHS quick-timer panel +
+full-page Clockwork product). One table, `timetracking_entries`; a running entry is a row with
 `end_at IS NULL`, and each entry carries an approval `status` (`open` → `submitted` →
 `approved`) that gates owner edits. The server authorizes every request via the
 `Mattermost-User-ID` header; admin endpoints require `PermissionManageSystem`, and the
@@ -55,10 +59,11 @@ server/
   store/sqlstore.go         Postgres/MySQL implementation
   store/migrations.go       idempotent schema (+ partial unique index)
 webapp/src/
-  index.tsx                 RHS + header button + admin route registration
+  index.tsx                 RHS + header button + product registration
   client/Client.ts          typed REST client (CSRF-aware)
   components/rhs/RHSView.tsx, components/WeeklyTimesheet.tsx, components/EntryEditModal.tsx
-  components/admin/AdminConsole.tsx, components/admin/AdminTable.tsx
+  components/ClockworkApp.tsx, components/PersonalReport.tsx   full-page product (role-based)
+  components/admin/AdminConsole.tsx, AdminTable.tsx, AdminProjectSummary.tsx
   utils/time.ts, styles.ts, icons.tsx, i18n.ts
 docs/API_CONTRACT.md        the server⇄webapp REST contract
 ```
@@ -68,7 +73,7 @@ docs/API_CONTRACT.md        the server⇄webapp REST contract
 Requires the Node version in `.nvmrc` (`nvm i`) and the Go toolchain.
 
 ```sh
-make dist        # → dist/com.vsjwl.mm-time-tracking-<version>.tar.gz
+make dist        # → dist/com.mrvnklm.clockwork-<version>.tar.gz
 make check-style # lint (Go + webapp)
 make test        # go test ./... + webapp jest
 ```
@@ -93,10 +98,12 @@ Or upload `dist/*.tar.gz` via **System Console → Plugins → Management**.
 
 ## Usage
 
-- Click the **clock icon** in the channel header to open the panel; **Start** a timer
-  (optionally type a project/note), **Break** to pause, **Stop** to clock out.
+- Click the **clock icon** in the channel header to open the quick-timer panel; **Start** a
+  timer (optionally type a project/note), **Break** to pause, **Stop** to clock out.
 - `/track in` · `/track out` · `/track break` · `/track status`.
-- System admins: **Main Menu → “Clockwork — Team report”** for the team dashboard + export.
+- Open **Clockwork** from the **product switcher** (top-left, next to Channels/Playbooks)
+  for the full-page report: your own tracked time, plus a **My time ↔ Team report** toggle
+  for system admins.
 
 ## Configuration
 
@@ -126,6 +133,23 @@ With the approval workflow **on**:
   single-running-entry invariant, and the status transitions). Skipped unless the DB DSN
   env vars are set; CI runs it with service containers.
 - The server⇄webapp REST contract is documented in [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md).
+
+## Troubleshooting
+
+- **Clockwork is missing from the product switcher** — confirm the plugin is enabled
+  (System Console → Plugins → Management) and hard-refresh the browser so the new webapp
+  bundle loads.
+- **The plugin won't start / DB errors in the logs** — Clockwork stores data in the
+  Mattermost database and targets **PostgreSQL** (v14+). MySQL works but is deprecated by
+  Mattermost; check System Console → Logs for the migration error.
+- **The approval-workflow UI (Submit / Approve) doesn't appear** — it is **off by
+  default**. Turn on *Enable approval workflow* in System Console → Plugins → Clockwork.
+- **"A timer is already running"** — only one running entry per user is allowed; **Stop**
+  the open timer before starting a new one.
+- **The team-report toggle is missing** — the *Team report* view and approve/reject
+  actions are limited to **system admins**; every user still sees their own report.
+- **CSV opens a blank tab / nothing downloads** — allow pop-ups for your Mattermost site;
+  the export opens in a new tab authenticated by your session cookie.
 
 ## Publishing / Marketplace
 

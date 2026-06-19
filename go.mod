@@ -1,4 +1,4 @@
-module github.com/vsjwl/mm-time-tracking
+module github.com/mrvnklm/mattermost-plugin-clockwork
 
 go 1.25
 

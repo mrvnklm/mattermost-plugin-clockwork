@@ -29,7 +29,7 @@ git push origin v1.0.0
 ```
 
 The release workflow (`.github/workflows/release.yml`) builds and attaches
-`dist/com.vsjwl.mm-time-tracking-<version>.tar.gz` to the GitHub Release (Mattermost
+`dist/com.mrvnklm.clockwork-<version>.tar.gz` to the GitHub Release (Mattermost
 rebuilds from source anyway). Verify it installs cleanly via **System Console → Plugins →
 Management**.
 
@@ -43,7 +43,7 @@ From the Marketplace `add_plugin` template:
 - [ ] A published changelog, linked via **`release_notes_url`** in `plugin.json` ✔.
 - [ ] **Released at `>= v1.0.0`** (out of Beta).
 - [ ] All configuration accessible via the Mattermost UI (`settings_schema`) ✔.
-- [ ] Reverse-DNS, non-colliding plugin ID (`com.vsjwl.mm-time-tracking`) ✔.
+- [ ] Reverse-DNS, non-colliding plugin ID (`com.mrvnklm.clockwork`) ✔.
 
 **Documentation** (reviewed by a Mattermost Technical Writer; `homepage_url` should point
 to it)
