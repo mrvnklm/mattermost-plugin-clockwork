@@ -125,6 +125,13 @@ const CSS = `
   font-weight: 600; color: var(--tt-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tt-tab:hover { color: var(--center-channel-color, #3f4350); }
 .tt-tab.is-active { color: var(--button-bg, #1c58d9); border-bottom-color: var(--button-bg, #1c58d9); }
+/* Mattermost's global header is transparent and relies on the dark app frame
+   that the team sidebar provides; a plugin product has no such frame, so the
+   white MM logo would wash out on the light page. Give the header its themed
+   background, scoped (via :has) to when the Clockwork product page is mounted so
+   the Channels header is never touched. */
+#root:has(.tt-product) #global-header,
+#root:has(.tt-admin) #global-header { background: var(--global-header-background, #1c2a42); }
 .tt-admin__inner { max-width: 1100px; margin: 0 auto; }
 .tt-admin__title { margin: 0 0 4px; font-size: 20px; font-weight: 700; }
 .tt-admin__sub { margin: 0 0 20px; color: var(--tt-muted); font-size: 13px; }
